@@ -11,6 +11,7 @@ spring:
   profiles:
     active: dev
 
+
   # ============ 数据源：MySQL 8 ============
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -39,6 +40,15 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
     default-property-inclusion: non_null
+
+
+jwt:
+  # JWT 签名密钥（HS256 算法要求至少 256 位 / 32 字节，下面这串够长）
+  secret: "ruyi-mart-jwt-secret-2026-must-be-at-least-256-bits-long-for-hs256-secure-key-1234567890abcdef"
+  # accessToken 有效期（秒）= 15 分钟
+  access-expire: 900
+  # refreshToken 有效期（秒）= 7 天
+  refresh-expire: 604800
 
 # ============ MyBatis-Plus ============
 mybatis-plus:
