@@ -1,6 +1,6 @@
-package common.result;
+package com.ruyi.ruyi_mart.common.result;
 
-import common.enums.ResultCode;
+import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import lombok.Data;
 
 import java.io.Serializable;

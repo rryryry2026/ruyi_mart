@@ -1,7 +1,7 @@
-package common.exception;
+package com.ruyi.ruyi_mart.common.exception;
 
-import common.enums.ResultCode;
-import common.result.Result;
+import com.ruyi.ruyi_mart.common.enums.ResultCode;
+import com.ruyi.ruyi_mart.common.result.Result;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 

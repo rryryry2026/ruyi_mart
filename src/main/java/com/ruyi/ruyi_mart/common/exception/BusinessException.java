@@ -1,6 +1,6 @@
-package common.exception;
+package com.ruyi.ruyi_mart.common.exception;
 
-import common.enums.ResultCode;
+import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import lombok.Getter;
 
 @Getter

@@ -1,4 +1,4 @@
-package common.enums;
+package com.ruyi.ruyi_mart.common.enums;
 
 import lombok.Getter;
 
