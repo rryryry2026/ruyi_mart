@@ -1,0 +1,69 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+
+spring:
+  application:
+    name: ruyi_mart
+  profiles:
+    active: dev
+
+  # ============ 数据源：MySQL 8 ============
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ruyi_mart?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    # ↓↓↓ 改成你本地 MySQL 的账号密码 ↓↓↓
+    username: root
+    password: 123456
+
+  # ============ Redis ============
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # password: 123456   # 本地没设密码就删掉这行
+      database: 0
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 3000ms
+          time-between-eviction-runs: 30s
+
+  # ============ Jackson 时间序列化 ============
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+# ============ MyBatis-Plus ============
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.ruyi.ruyi_mart.module.*.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl   # M1 调试用，上线可关
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# ============ SpringDoc API 文档 ============
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+# ============ 日志 ============
+logging:
+  level:
+    com.ruyi.ruyi_mart: debug
+    org.springframework.security: warn
