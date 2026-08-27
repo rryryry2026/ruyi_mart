@@ -89,5 +89,11 @@ public class LoginService {
 
     }
 
+    public void logout(Long userId){
+        String redisKey = "ruyi:user:refresh:" + userId;
+        redissonClient.getBucket(redisKey).delete();
+
+    }
+
 
 }
