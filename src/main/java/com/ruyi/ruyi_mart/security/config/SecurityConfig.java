@@ -24,10 +24,17 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/user/login","/user/register").permitAll()
+                        .requestMatchers("/user/login","/user/register","/user/refresh").permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .exceptionHandling(ex -> ex
+                                .authenticationEntryPoint((request, response, authException) -> {
+                                    response.setStatus(401);
+                                    response.setContentType("application/json;charset=UTF-8");
+                                    response.getWriter().write("{\"code\":401,\"message\":\"未认证，请先登录\"}");
+                                })
+                        );
 
         return http.build();
     }

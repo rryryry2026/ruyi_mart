@@ -39,11 +39,11 @@ public class LoginService {
         );
 
         if(user == null){
-            throw new BusinessException(ResultCode.FAIL,"用户名或密码错误");
+            throw new BusinessException(ResultCode.UNAUTHORIZED,"用户名或密码错误");
         }
 
         if(!passwordEncoder.matches(req.getPassword(), user.getPassword())){
-            throw new BusinessException(ResultCode.FAIL,"用户名或密码错误");
+            throw new BusinessException(ResultCode.UNAUTHORIZED,"用户名或密码错误");
         }
 
         String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getUsername());
@@ -52,11 +52,37 @@ public class LoginService {
         String redisKey = "ruyi:user:refresh:" + user.getId();
         redissonClient.getBucket(redisKey)
                 .set(refreshToken,jwtProperties.getRefreshExpire(), TimeUnit.SECONDS);
+
         LoginResponse resp = new LoginResponse();
         resp.setUserId(user.getId());
         resp.setUsername(user.getUsername());
         resp.setNickname(user.getNickname());
         resp.setAccessToken(accessToken);
+        resp.setRefreshToken(refreshToken);
+        resp.setExpiresIn(jwtProperties.getAccessExpire());
+        return resp;
+
+    }
+    public LoginResponse refresh(String refreshToken){
+        if(!jwtUtil.validateToken(refreshToken)){
+            throw  new BusinessException(ResultCode.UNAUTHORIZED,"refreshToken 无效或已过期");
+        }
+
+        Long userId = jwtUtil.getUserId(refreshToken);
+        String username = jwtUtil.getUsername(refreshToken);
+
+        String redisKey = "ruyi:user:refresh:" + userId;
+        String stored = (String) redissonClient.getBucket(redisKey).get();
+        if(stored == null || !stored.equals(refreshToken)){
+            throw new BusinessException(ResultCode.UNAUTHORIZED,"refreshToken 已失效，请重新登录");
+        }
+
+        String newAccessToken = jwtUtil.generateAccessToken(userId,username);
+
+        LoginResponse resp = new LoginResponse();
+        resp.setUserId(userId);
+        resp.setUsername(username);
+        resp.setAccessToken(newAccessToken);
         resp.setRefreshToken(refreshToken);
         resp.setExpiresIn(jwtProperties.getAccessExpire());
         return resp;
