@@ -35,6 +35,12 @@ spring:
           max-wait: 3000ms
           time-between-eviction-runs: 30s
 
+  rocketmq:
+    name-server: localhost:9876
+    producer:
+      group: ruyi_mart_producer_group
+
+
   # ============ Jackson 时间序列化 ============
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss

@@ -65,6 +65,15 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         return rows;
     }
 
+    @Override
+    public int addStock(Long id, Integer quantity){
+        int rows = baseMapper.addStock(id,quantity);
+        if(rows > 0){
+            redissonClient.getBucket(KEY_PREFIX + id).delete();
+        }
+        return rows;
+    }
+
     private String serialize(Product p){
         try{
             return  objectMapper.writeValueAsString(p);

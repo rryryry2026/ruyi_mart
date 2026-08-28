@@ -9,6 +9,7 @@ import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderItemMapper;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
+import com.ruyi.ruyi_mart.module.order.mq.OrderEventProducer;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.product.service.ProductService;
@@ -31,6 +32,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private ProductService productService;
     @Autowired
     private OrderItemMapper orderItemMapper;
+    @Autowired
+    private OrderEventProducer orderEventProducer;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -55,11 +58,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             Long productId = ci.getProductId();
             Integer quantity = ci.getQuantity();
 
-            int rows = productService.deductStock(productId,quantity);
-            if(rows == 0){
-                throw new BusinessException(ResultCode.NOT_FIND,"商品库存不足：" + productId);
-            }
-
             BigDecimal subtotal = ci.getPrice().multiply(BigDecimal.valueOf(quantity));
             totalAmount = totalAmount.add(subtotal);
 
@@ -82,6 +80,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         cartService.clear(userId,null);
+
+        orderEventProducer.sendOrderCreated(order.getId());
 
         OrderVO vo = new OrderVO();
         vo.setId(order.getId());
