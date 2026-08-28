@@ -2,6 +2,9 @@ package com.ruyi.ruyi_mart.module.cart.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ruyi.ruyi_mart.common.enums.ResultCode;
+import com.ruyi.ruyi_mart.common.exception.BusinessException;
+import com.ruyi.ruyi_mart.common.result.Result;
 import com.ruyi.ruyi_mart.module.cart.service.CartService;
 import com.ruyi.ruyi_mart.module.cart.vo.CartItemVO;
 import com.ruyi.ruyi_mart.module.product.entity.Product;
@@ -90,6 +93,9 @@ public class CartServiceImpl implements CartService {
 
     private CartItemVO loadSnapshot(Long productId){
         Product p = productService.getById(productId);
+        if (p == null) {
+            throw new BusinessException(ResultCode.NOT_FIND, "商品不存在: " + productId);
+        }
         CartItemVO vo = new CartItemVO();
         vo.setProductId(p.getId());
         vo.setName(p.getName());
@@ -120,7 +126,7 @@ public class CartServiceImpl implements CartService {
         String guestKey = GUEST_PREFIX + guestId;
         String userKey = CART_PREFIX + userId;
         RMap<String,String> guestCart = redissonClient.getMap(guestKey,StringCodec.INSTANCE);
-        if(guestCart.isEmpty()) return;;
+        if(guestCart.isEmpty()) return;
         RMap<String,String> userCart = redissonClient.getMap(userKey,StringCodec.INSTANCE);
         for(Map.Entry<String,String> entry : guestCart.entrySet()){
             String productId = entry.getKey();
