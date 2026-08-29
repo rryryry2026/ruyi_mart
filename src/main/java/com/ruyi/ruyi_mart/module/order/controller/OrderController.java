@@ -1,5 +1,6 @@
 package com.ruyi.ruyi_mart.module.order.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.common.result.Result;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
@@ -32,6 +33,30 @@ public class OrderController {
     public Result<OrderVO> detail(@PathVariable Long id){
         return Result.success(orderService.getOrderDetail(currentUserId(),id));
     }
+
+    @PostMapping("/pay/{orderId}")
+    public Result<OrderVO> pay(@PathVariable Long orderId){
+        return Result.success(orderService.payOrder(currentUserId(),orderId));
+    }
+
+    @PostMapping("/cancel/{orderId}")
+    public Result<OrderVO> cancel(@PathVariable Long orderId){
+        return  Result.success(orderService.cancelOrder(currentUserId(),orderId));
+    }
+
+    @GetMapping("/list/status/{status}")
+    public Result<List<OrderVO>> listByStatus(@PathVariable Integer status){
+        return Result.success(orderService.listOrdersByStatus(currentUserId(),status));
+    }
+
+    @GetMapping("/list/page")
+    public Result<Page<OrderVO>> listPage(@RequestParam(defaultValue = "1") int pageNum,
+                                          @RequestParam(defaultValue = "10") int pagesize,
+                                          @RequestParam(required = false) Integer status){
+        return  Result.success(orderService.listOrdersPage(currentUserId(),status,pageNum,pagesize));
+
+    }
+
 
     private Long currentUserId(){
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();

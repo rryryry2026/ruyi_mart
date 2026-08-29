@@ -5,7 +5,9 @@ public enum OrderStatus {
     PENDING(0, "待支付"),
     PAID(1, "已支付"),
     STOCK_FAILED(2, "库存不足"),
-    CLOSED(3, "已关闭");
+    CLOSED(3, "已关闭"),
+    CANCELLED(4, "已取消");
+
 
     private final int code;
     private final String desc;
