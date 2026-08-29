@@ -35,11 +35,6 @@ spring:
           max-wait: 3000ms
           time-between-eviction-runs: 30s
 
-  rocketmq:
-    name-server: localhost:9876
-    producer:
-      group: ruyi_mart_producer_group
-
 
   # ============ Jackson 时间序列化 ============
   jackson:
@@ -47,6 +42,11 @@ spring:
     time-zone: GMT+8
     default-property-inclusion: non_null
 
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: ruyi_mart_producer_group
 
 jwt:
   # JWT 签名密钥（HS256 算法要求至少 256 位 / 32 字节，下面这串够长）
