@@ -1,5 +1,6 @@
 package com.ruyi.ruyi_mart.module.order.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
@@ -91,6 +92,44 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         vo.setStatus(order.getStatus());
         vo.setCreateTime(order.getCreateTime());
         vo.setItems(itemList);
+        return vo;
+    }
+
+    @Override
+    public List<OrderVO> listOrders(Long userId){
+        QueryWrapper<Order> qw = new QueryWrapper<>();
+        qw.eq("user_id",userId).orderByDesc("create_time");
+        List<Order> orders = baseMapper.selectList(qw);
+        List<OrderVO> result = new ArrayList<>();
+        for(Order o :orders){
+            result.add(toVO(o));
+        }
+        return result;
+    }
+
+    @Override
+    public OrderVO getOrderDetail(Long userId, Long orderId){
+        Order order = baseMapper.selectById(orderId);
+        if(order == null){
+            throw new BusinessException(ResultCode.NOT_FIND,"订单不存在");
+        }
+        if(!order.getUserId().equals(userId)){
+            throw new BusinessException(ResultCode.FORBIDDEN,"无权查看该订单");
+        }
+        return toVO(order);
+    }
+
+    private OrderVO toVO(Order order){
+        OrderVO vo = new OrderVO();
+        vo.setId(order.getId());
+        vo.setOrderNo(order.getOrderNo());
+        vo.setUserId(order.getUserId());
+        vo.setTotalAmount(order.getTotalAmount());
+        vo.setStatus(order.getStatus());
+        vo.setCreateTime(order.getCreateTime());
+        QueryWrapper<OrderItem> qw = new QueryWrapper<>();
+        qw.eq("order_id",order.getId());
+        vo.setItems(orderItemMapper.selectList(qw));
         return vo;
     }
 

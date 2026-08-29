@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
+import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderItemMapper;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
 import com.ruyi.ruyi_mart.module.product.service.ProductService;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.redisson.api.RBucket;
@@ -37,9 +39,6 @@ public class StockDeductConsumer implements RocketMQListener<Long> {
     private OrderMapper orderMapper;
     @Autowired
     private RedissonClient redissonClient;
-
-    private static final int STATUS_CONFIRMED = 1;
-    private static final int STATUS_STOCK_FAIL = 2;
 
     @Override
     public void onMessage(Long orderId){
@@ -90,7 +89,7 @@ public class StockDeductConsumer implements RocketMQListener<Long> {
 
             Order order = new Order();
             order.setId(orderId);
-            order.setStatus(allOk ? STATUS_CONFIRMED : STATUS_STOCK_FAIL);
+            order.setStatus(allOk ? OrderStatus.PENDING.getCode() : OrderStatus.STOCK_FAILED.getCode());
             orderMapper.updateById(order);
 
             bucket.set(allOk ? "SUCCESS" : "FAILED",Duration.ofMinutes(10));

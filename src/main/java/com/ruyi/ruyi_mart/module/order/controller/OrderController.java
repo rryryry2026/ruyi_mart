@@ -6,11 +6,10 @@ import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import java.net.Authenticator;
+import java.util.List;
+
 
 @RestController
 @RequestMapping("/order")
@@ -21,9 +20,21 @@ public class OrderController {
 
     @PostMapping("/create")
     public Result<OrderVO> create(){
+        return Result.success(orderService.createOrder(currentUserId()));
+    }
+
+    @GetMapping("/list")
+    public Result<List<OrderVO>> list(){
+        return Result.success(orderService.listOrders(currentUserId()));
+    }
+
+    @GetMapping("/{id}")
+    public Result<OrderVO> detail(@PathVariable Long id){
+        return Result.success(orderService.getOrderDetail(currentUserId(),id));
+    }
+
+    private Long currentUserId(){
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Long userId = (Long) authentication.getPrincipal();
-        OrderVO vo = orderService.createOrder(userId);
-        return Result.success(vo);
+        return (Long) authentication.getPrincipal();
     }
 }
