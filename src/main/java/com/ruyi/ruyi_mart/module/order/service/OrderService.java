@@ -15,7 +15,7 @@ public interface OrderService extends IService<Order> {
 
     OrderVO getOrderDetail(Long userId, Long oderId);
 
-    OrderVO payOrder(Long userId,Long orderId);
+    OrderVO payOrder(Long userId,Long orderId,String payType);
 
     OrderVO cancelOrder(Long userId,Long orderId);
 

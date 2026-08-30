@@ -35,8 +35,8 @@ public class OrderController {
     }
 
     @PostMapping("/pay/{orderId}")
-    public Result<OrderVO> pay(@PathVariable Long orderId){
-        return Result.success(orderService.payOrder(currentUserId(),orderId));
+    public Result<OrderVO> pay(@PathVariable Long orderId,@RequestParam(required = false,defaultValue = "MOCK") String payType){
+        return Result.success(orderService.payOrder(currentUserId(),orderId,payType));
     }
 
     @PostMapping("/cancel/{orderId}")

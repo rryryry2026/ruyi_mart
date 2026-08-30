@@ -15,6 +15,7 @@ import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
 import com.ruyi.ruyi_mart.module.order.mq.OrderEventProducer;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
+import com.ruyi.ruyi_mart.module.payment.holder.PaymentStrategyHolder;
 import com.ruyi.ruyi_mart.module.product.service.ProductService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private OrderItemMapper orderItemMapper;
     @Autowired
     private OrderEventProducer orderEventProducer;
+    @Autowired
+    private PaymentStrategyHolder paymentStrategyHolder;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -122,7 +125,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
 
     @Override
-    public OrderVO payOrder(Long userId,Long orderId){
+    public OrderVO payOrder(Long userId,Long orderId,String payType){
         Order order = baseMapper.selectById(orderId);
         if(order == null){
             throw new BusinessException(ResultCode.NOT_FIND,"订单不存在");
@@ -132,6 +135,12 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
         if(order.getStatus() != OrderStatus.PENDING.getCode()){
             throw new BusinessException(ResultCode.FAIL,"订单状态异常，无法支付");
+        }
+
+        boolean paid = paymentStrategyHolder.get(payType)
+                .pay(orderId,userId,order.getTotalAmount());
+        if(!paid){
+            throw new BusinessException(ResultCode.FAIL,"支付失败");
         }
 
         Order upd = new Order();
