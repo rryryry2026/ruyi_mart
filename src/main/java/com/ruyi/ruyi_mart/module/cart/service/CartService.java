@@ -21,6 +21,9 @@ public interface CartService {
     //清空
     void clear(Long userId, String guestId);
 
+    //清空但不释放库存
+    void clearKeepStock(Long userId, String guestId);
+
     //合并
     void mergeGuestToUser(String guestId, Long userId);
 

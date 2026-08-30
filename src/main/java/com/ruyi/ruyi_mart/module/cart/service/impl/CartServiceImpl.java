@@ -9,6 +9,7 @@ import com.ruyi.ruyi_mart.module.cart.service.CartService;
 import com.ruyi.ruyi_mart.module.cart.vo.CartItemVO;
 import com.ruyi.ruyi_mart.module.product.entity.Product;
 import com.ruyi.ruyi_mart.module.product.service.ProductService;
+import com.ruyi.ruyi_mart.module.stock.service.StockService;
 import org.redisson.api.RMap;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
@@ -30,6 +31,8 @@ public class CartServiceImpl implements CartService {
     private ProductService productService;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private StockService stockService;
 
     private static final String CART_PREFIX = "ruyi:cart:";
     private static final String GUEST_PREFIX = "ruyi:cart:guest:";
@@ -40,6 +43,10 @@ public class CartServiceImpl implements CartService {
 
     @Override
     public void addItem(Long userId, String guestId, Long productId, Integer quantity){
+
+        if(!stockService.tryLock(productId,quantity)){
+            throw new BusinessException(ResultCode.FAIL,"商品库存不足" +  productId);
+        }
         String key = keyfor(userId,guestId);
         RMap<String,String> cart = redissonClient.getMap(key, StringCodec.INSTANCE);
         String existing = cart.get(String.valueOf(productId));
@@ -62,6 +69,15 @@ public class CartServiceImpl implements CartService {
         String existing = cart.get(String.valueOf(productId));
         if(existing == null) return;
         CartItemVO item = deserialize(existing);
+        int oldQty = item.getQuantity();
+        int diff = quantity - oldQty;
+        if(diff > 0 ){
+            if(!stockService.tryLock(productId,diff)){
+                throw new BusinessException(ResultCode.FAIL,"商品库存不足" + productId);
+            }
+        }else if(diff < 0){
+            stockService.release(productId,-diff);
+        }
         item.setQuantity(quantity);
         cart.put(String.valueOf(productId),serialize(item));
     }
@@ -70,6 +86,10 @@ public class CartServiceImpl implements CartService {
     public void removeItem(Long userId, String guestId, Long productId){
         String key = keyfor(userId,guestId);
         RMap<String,String> cart = redissonClient.getMap(key,StringCodec.INSTANCE);
+        String existing = cart.get(String.valueOf(productId));
+        if(existing == null) return;
+        CartItemVO item = deserialize(existing);
+        stockService.release(productId, item.getQuantity());
         cart.remove(String.valueOf(productId));
     }
 
@@ -88,6 +108,17 @@ public class CartServiceImpl implements CartService {
 
     @Override
     public void clear(Long userId,String guestId){
+        String key = keyfor(userId,guestId);
+        RMap<String,String> cart = redissonClient.getMap(key,StringCodec.INSTANCE);
+        for(String json:cart.values()){
+            CartItemVO item = deserialize(json);
+            stockService.release(item.getProductId(),item.getQuantity());
+        }
+        cart.delete();
+    }
+
+    @Override
+    public void clearKeepStock(Long userId, String guestId){
         redissonClient.getMap(keyfor(userId,guestId)).delete();
     }
 

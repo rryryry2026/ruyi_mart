@@ -5,7 +5,7 @@ import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderItemMapper;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
-import com.ruyi.ruyi_mart.module.product.service.ProductService;
+import com.ruyi.ruyi_mart.module.stock.service.StockService;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
@@ -31,9 +31,9 @@ public class OrderTimeoutCloseTask {
     @Autowired
     private OrderItemMapper orderItemMapper;
     @Autowired
-    private ProductService productService;
-    @Autowired
     private RedissonClient redissonClient;
+    @Autowired
+    private StockService stockService;
 
     @Scheduled(fixedDelay = 60_000)
     public void closeExpiredOrders(){
@@ -55,18 +55,15 @@ public class OrderTimeoutCloseTask {
         Long orderId = order.getId();
         RBucket<String> bucket = redissonClient.getBucket("ruyi:mq:stock-deduct:" + orderId, StringCodec.INSTANCE);
 
-        if(!"SUCCESS".equals(bucket.get())){
-            order.setStatus(3);
-            order.setUpdateTime(LocalDateTime.now());
-            orderMapper.updateById(order);
-            log.info("订单 {} 超时关闭（库存未锁定），直接关单", orderId);
+        if("CLOSED".equals(bucket.get())){
             return;
         }
+
         QueryWrapper<OrderItem> itemQw = new QueryWrapper<>();
         itemQw.eq("order_id",orderId);
         List<OrderItem> items = orderItemMapper.selectList(itemQw);
         for(OrderItem item:items){
-            productService.addStock(item.getProductId(),item.getQuantity());
+            stockService.release(item.getProductId(),item.getQuantity());
         }
 
         order.setStatus(3);

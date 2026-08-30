@@ -12,11 +12,10 @@ import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
 import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderItemMapper;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
-import com.ruyi.ruyi_mart.module.order.mq.OrderEventProducer;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.payment.holder.PaymentStrategyHolder;
-import com.ruyi.ruyi_mart.module.product.service.ProductService;
+import com.ruyi.ruyi_mart.module.stock.service.StockService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,13 +32,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Autowired
     private CartService cartService;
     @Autowired
-    private ProductService productService;
-    @Autowired
     private OrderItemMapper orderItemMapper;
     @Autowired
-    private OrderEventProducer orderEventProducer;
-    @Autowired
     private PaymentStrategyHolder paymentStrategyHolder;
+    @Autowired
+    private StockService stockService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -85,9 +82,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             orderItemMapper.insert(item);
         }
 
-        cartService.clear(userId,null);
-
-        orderEventProducer.sendOrderCreated(order.getId());
+        cartService.clearKeepStock(userId,null);
 
         OrderVO vo = new OrderVO();
         vo.setId(order.getId());
@@ -143,6 +138,13 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException(ResultCode.FAIL,"支付失败");
         }
 
+        QueryWrapper<OrderItem> qw = new QueryWrapper<>();
+        qw.eq("order_id",orderId);
+        List<OrderItem> items = orderItemMapper.selectList(qw);
+        for(OrderItem item : items){
+            stockService.confirm(item.getProductId(),item.getQuantity());
+        }
+
         Order upd = new Order();
         upd.setId(orderId);
         upd.setStatus(OrderStatus.PAID.getCode());
@@ -169,7 +171,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         qw.eq("order_id",orderId);
         List<OrderItem> items = orderItemMapper.selectList(qw);
         for(OrderItem item:items){
-            productService.addStock(item.getProductId(),item.getQuantity());
+            stockService.release(item.getProductId(), item.getQuantity());
         }
 
         Order upd = new Order();
