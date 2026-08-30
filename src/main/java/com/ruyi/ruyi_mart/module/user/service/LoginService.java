@@ -46,8 +46,8 @@ public class LoginService {
             throw new BusinessException(ResultCode.UNAUTHORIZED,"用户名或密码错误");
         }
 
-        String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getUsername());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
+        String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getUsername(),user.getUserType());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(),user.getUserType());
 
         String redisKey = "ruyi:user:refresh:" + user.getId();
         redissonClient.getBucket(redisKey)
@@ -70,6 +70,7 @@ public class LoginService {
 
         Long userId = jwtUtil.getUserId(refreshToken);
         String username = jwtUtil.getUsername(refreshToken);
+        Integer userType = jwtUtil.getUserType(refreshToken);
 
         String redisKey = "ruyi:user:refresh:" + userId;
         String stored = (String) redissonClient.getBucket(redisKey).get();
@@ -77,7 +78,7 @@ public class LoginService {
             throw new BusinessException(ResultCode.UNAUTHORIZED,"refreshToken 已失效，请重新登录");
         }
 
-        String newAccessToken = jwtUtil.generateAccessToken(userId,username);
+        String newAccessToken = jwtUtil.generateAccessToken(userId,username,userType);
 
         LoginResponse resp = new LoginResponse();
         resp.setUserId(userId);

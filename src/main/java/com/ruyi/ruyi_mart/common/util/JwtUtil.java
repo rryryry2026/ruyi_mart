@@ -27,20 +27,21 @@ public class JwtUtil {
         this.key = Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateAccessToken(Long userId,String username){
-        return buildToken(userId,username,jwtProperties.getAccessExpire());
+    public String generateAccessToken(Long userId,String username,Integer userType){
+        return buildToken(userId,username,userType,jwtProperties.getAccessExpire());
     }
 
-    public String generateRefreshToken(Long userId,String username){
-        return buildToken(userId,username,jwtProperties.getRefreshExpire());
+    public String generateRefreshToken(Long userId,String username,Integer userType){
+        return buildToken(userId,username,userType,jwtProperties.getRefreshExpire());
     }
 
-    private String buildToken(Long userId,String username,Long expireSeconds){
+    private String buildToken(Long userId,String username,Integer userType,Long expireSeconds){
         Date now = new Date();
         Date expiration = new Date(now.getTime() + expireSeconds * 1000);
         return Jwts.builder()
                 .subject(username)
                 .claim("uid",userId)
+                .claim("userType", userType)
                 .issuedAt(now)
                 .expiration(expiration)
                 .signWith(key)
@@ -66,10 +67,16 @@ public class JwtUtil {
     }
 
     public Long getUserId(String token){
+
         return  parseToken(token).get("uid", Long.class);
     }
 
     public String getUsername(String token){
+
         return parseToken(token).getSubject();
+    }
+
+    public Integer getUserType(String token){
+        return parseToken(token).get("userType", Integer.class);
     }
 }

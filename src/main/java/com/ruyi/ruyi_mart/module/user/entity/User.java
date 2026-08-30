@@ -1,9 +1,6 @@
 package com.ruyi.ruyi_mart.module.user.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -20,6 +17,9 @@ public class User {
     private String nickname;
     private String phone;
     private Integer status;
+
+    @TableField("user_type")
+    private Integer userType;
 
     @TableLogic
     private Integer deleted;

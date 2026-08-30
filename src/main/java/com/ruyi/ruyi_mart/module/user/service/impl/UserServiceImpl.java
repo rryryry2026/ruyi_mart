@@ -24,6 +24,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(ResultCode.FAIL,"用户名已存在");
         }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setUserType(2);
         this.save(user);
     }
 }
