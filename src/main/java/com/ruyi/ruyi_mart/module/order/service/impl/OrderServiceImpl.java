@@ -12,6 +12,7 @@ import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
 import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderItemMapper;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
+import com.ruyi.ruyi_mart.module.order.mq.OrderEventProducer;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.payment.holder.PaymentStrategyHolder;
@@ -38,6 +39,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private PaymentStrategyHolder paymentStrategyHolder;
     @Autowired
     private StockService stockService;
+    @Autowired
+    private OrderEventProducer orderEventProducer;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -93,6 +96,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         cartService.clearKeepStock(userId,null);
+        orderEventProducer.sendCloseDelay(order.getId());
 
         OrderVO vo = new OrderVO();
         vo.setId(order.getId());
