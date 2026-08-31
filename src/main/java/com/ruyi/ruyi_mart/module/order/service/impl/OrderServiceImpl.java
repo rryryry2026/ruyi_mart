@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,6 +45,15 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         List<CartItemVO> cartItems = cartService.list(userId,null);
         if(cartItems == null || cartItems.isEmpty()){
             throw new BusinessException(ResultCode.NOT_FIND,"购物车为空，无法下单");
+        }
+
+        List<CartItemVO> sortedItems = new ArrayList<>(cartItems);
+        sortedItems.sort(Comparator.comparing(CartItemVO::getProductId));
+        for(CartItemVO ci : sortedItems){
+            boolean locked = stockService.tryLock(ci.getProductId(), ci.getQuantity());
+            if(!locked){
+                throw new BusinessException(ResultCode.FAIL,"商品库存不足: " + ci.getName());
+            }
         }
 
         Order order = new Order();
@@ -120,6 +130,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public OrderVO payOrder(Long userId,Long orderId,String payType){
         Order order = baseMapper.selectById(orderId);
         if(order == null){
