@@ -1,6 +1,8 @@
 package com.ruyi.ruyi_mart.module.product.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.common.result.Result;
+import com.ruyi.ruyi_mart.module.product.dto.ProductQueryDTO;
 import com.ruyi.ruyi_mart.module.product.entity.Product;
 import com.ruyi.ruyi_mart.module.product.service.ProductService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,11 @@ public class ProductController {
     @GetMapping("/list")
     public Result<?> list(){
         return Result.success(productService.list());
+    }
+
+    @GetMapping("/page")
+    public Result<Page<Product>> page(ProductQueryDTO query){
+        return Result.success(productService.pageQuery(query));
     }
 
 }
