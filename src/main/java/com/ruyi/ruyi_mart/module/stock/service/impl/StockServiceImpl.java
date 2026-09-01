@@ -58,4 +58,9 @@ public class StockServiceImpl implements StockService {
     public void release(Long productId,Integer count){
         stockMapper.rollback(productId,count);
     }
+
+    @Override
+    public Stock getByProductId(Long productId){
+        return stockMapper.selectById(productId);
+    }
 }
