@@ -198,6 +198,48 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return getOrderDetail(userId,orderId);
     }
 
+    // ============ 发货  ============
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public OrderVO shipOrder(Long orderId){
+        Order order = baseMapper.selectById(orderId);
+        if(order == null){
+            throw new BusinessException(ResultCode.NOT_FIND,"订单不存在");
+        }
+        if(order.getStatus() != OrderStatus.PAID.getCode()){
+            throw new BusinessException(ResultCode.FAIL,"只有已支付订单才能发货");
+        }
+        Order upd = new Order();
+        upd.setId(orderId);
+        upd.setStatus(OrderStatus.SHIPPED.getCode());
+        upd.setUpdateTime(LocalDateTime.now());
+        baseMapper.updateById(upd);
+        return toVO(baseMapper.selectById(orderId));
+    }
+
+    // ============ 确认收货  ============
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public OrderVO confirmReceive(Long userId, Long orderId){
+        Order order = baseMapper.selectById(orderId);
+        if(order == null){
+            throw new BusinessException(ResultCode.NOT_FIND,"订单不存在");
+        }
+        if(!order.getUserId().equals(userId)){
+            throw new BusinessException(ResultCode.FORBIDDEN,"无权操作该订单");
+        }
+        if(order.getStatus() != OrderStatus.SHIPPED.getCode()){
+            throw new BusinessException(ResultCode.FAIL,"只有已发货订单才能确认收货");
+        }
+        Order upd = new Order();
+        upd.setId(orderId);
+        upd.setStatus(OrderStatus.COMPLETED.getCode());
+        upd.setUpdateTime(LocalDateTime.now());
+        baseMapper.updateById(upd);
+        return toVO(baseMapper.selectById(orderId));
+    }
+
+
     @Override
     public List<OrderVO> listOrdersByStatus(Long userId, Integer status){
         QueryWrapper<Order> qw = new QueryWrapper<>();

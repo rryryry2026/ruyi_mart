@@ -6,7 +6,9 @@ public enum OrderStatus {
     PAID(1, "已支付"),
     STOCK_FAILED(2, "库存不足"),
     CLOSED(3, "已关闭"),
-    CANCELLED(4, "已取消");
+    CANCELLED(4, "已取消"),
+    SHIPPED(5, "已发货"),
+    COMPLETED(6, "已完成");
 
 
     private final int code;

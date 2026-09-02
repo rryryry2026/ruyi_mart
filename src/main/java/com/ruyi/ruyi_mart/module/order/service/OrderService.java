@@ -23,4 +23,10 @@ public interface OrderService extends IService<Order> {
 
     Page<OrderVO> listOrdersPage(Long userId, Integer status, int pageNum, int pageSize);
 
+    /** 管理员发货 */
+    OrderVO shipOrder(Long orderId);
+
+    /** 用户确认收货： */
+    OrderVO confirmReceive(Long userId, Long orderId);
+
 }

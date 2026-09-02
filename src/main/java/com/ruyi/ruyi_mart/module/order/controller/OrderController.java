@@ -5,6 +5,7 @@ import com.ruyi.ruyi_mart.common.result.Result;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -54,7 +55,17 @@ public class OrderController {
                                           @RequestParam(defaultValue = "10") int pagesize,
                                           @RequestParam(required = false) Integer status){
         return  Result.success(orderService.listOrdersPage(currentUserId(),status,pageNum,pagesize));
+    }
 
+    @PostMapping("/ship/{orderId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<OrderVO> ship(@PathVariable Long orderId){
+        return Result.success(orderService.shipOrder(orderId));
+    }
+
+    @PostMapping("/confirm/{orderId}")
+    public Result<OrderVO> confirm(@PathVariable Long orderId){
+        return Result.success(orderService.confirmReceive(currentUserId(),orderId));
     }
 
 
