@@ -9,4 +9,7 @@ public interface ProductService extends IService<Product> {
     /** 商品分页查询：支持名称搜索、分类筛选、上下架状态筛选 */
     Page<Product> pageQuery(ProductQueryDTO query);
 
+    /** 上/下架切换：把指定商品状态改为 targetStatus（1上架/0下架） */
+    void updateStatus(Long id, Integer targetStatus);
+
 }

@@ -5,7 +5,9 @@ import com.ruyi.ruyi_mart.common.result.Result;
 import com.ruyi.ruyi_mart.module.product.dto.ProductQueryDTO;
 import com.ruyi.ruyi_mart.module.product.entity.Product;
 import com.ruyi.ruyi_mart.module.product.service.ProductService;
+import org.apache.ibatis.annotations.Param;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -46,6 +48,13 @@ public class ProductController {
     @GetMapping("/page")
     public Result<Page<Product>> page(ProductQueryDTO query){
         return Result.success(productService.pageQuery(query));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}/status")
+    public Result<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status){
+        productService.updateStatus(id, status);
+        return Result.success();
     }
 
 }

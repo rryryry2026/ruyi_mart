@@ -81,6 +81,14 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
 
     }
 
+    @Override
+    public void updateStatus(Long id, Integer targetStatus){
+        Product p = new Product();
+        p.setId(id);
+        p.setStatus(targetStatus);
+        this.updateById(p);
+    }
+
 
     private String serialize(Product p){
         try{
