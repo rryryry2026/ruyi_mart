@@ -16,6 +16,9 @@ public interface StockService {
     /**回补*/
     void release(Long productId,Integer count);
 
+    /**退款回补*/
+    void refund(Long productId,Integer count);
+
     /**查询商品库存明细（total/available/locked）*/
     Stock getByProductId(Long productId);
 }

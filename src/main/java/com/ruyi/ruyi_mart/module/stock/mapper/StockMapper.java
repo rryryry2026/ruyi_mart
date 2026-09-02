@@ -23,4 +23,9 @@ public interface StockMapper extends BaseMapper<Stock> {
     @Update("UPDATE stock SET available = available + #{n}, locked = locked - #{n} " +
             "WHERE product_id = #{id} AND locked >= #{n}")
     int rollback(@Param("id") Long id, @Param("n") Integer n);
+
+    /**退款回补*/
+    @Update("UPDATE stock SET available = available + #{n}, version = version + 1 " +
+            "WHERE product_id = #{id} AND available + #{n} <= total")
+    int refundBack(@Param("id") Long id, @Param("n") Integer n);
 }

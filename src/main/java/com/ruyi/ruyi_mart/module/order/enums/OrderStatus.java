@@ -8,7 +8,8 @@ public enum OrderStatus {
     CLOSED(3, "已关闭"),
     CANCELLED(4, "已取消"),
     SHIPPED(5, "已发货"),
-    COMPLETED(6, "已完成");
+    COMPLETED(6, "已完成"),
+    REFUNDED(7, "已退款");
 
 
     private final int code;

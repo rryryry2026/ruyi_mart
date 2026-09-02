@@ -60,6 +60,11 @@ public class StockServiceImpl implements StockService {
     }
 
     @Override
+    public void refund(Long productId, Integer count){
+        stockMapper.refundBack(productId,count);
+    }
+
+    @Override
     public Stock getByProductId(Long productId){
         return stockMapper.selectById(productId);
     }
