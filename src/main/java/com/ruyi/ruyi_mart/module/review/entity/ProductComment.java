@@ -41,11 +41,5 @@ public class ProductComment {
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
-    public int getIsGoodReview() {
-        if (this.rating == null) {
-            return 0;
-        }
-        return this.rating >= 4 ? 1 : 0;
-    }
 }
 

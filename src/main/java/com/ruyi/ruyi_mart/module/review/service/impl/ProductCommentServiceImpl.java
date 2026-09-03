@@ -264,7 +264,7 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
             c.setUserAvatar("");
         }
         // 好评标记：由 rating 推导，写入确保与主表列一致
-        c.setIsGoodReview(c.getIsGoodReview());
+        c.setIsGoodReview(dto.getRating() >= 4 ? 1: 0);
         return c;
     }
 

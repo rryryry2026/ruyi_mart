@@ -1,4 +1,4 @@
-package com.ruyi.ruyi_mart.module.review;
+package com.ruyi.ruyi_mart.module.review.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.common.result.Result;
@@ -11,14 +11,13 @@ import com.ruyi.ruyi_mart.module.review.vo.ProductFirstCommentVO;
 import com.ruyi.ruyi_mart.module.review.vo.ProductSecondCommentVO;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.convert.PeriodUnit;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/review")
-public class controller {
+public class ReviewController {
 
     @Autowired
     private ProductCommentService productCommentService;
