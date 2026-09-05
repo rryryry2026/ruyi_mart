@@ -16,6 +16,7 @@ import com.ruyi.ruyi_mart.module.order.mq.OrderEventProducer;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.payment.holder.PaymentStrategyHolder;
+import com.ruyi.ruyi_mart.module.payment.vo.PaymentResult;
 import com.ruyi.ruyi_mart.module.stock.service.StockService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -135,29 +136,44 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public OrderVO payOrder(Long userId,Long orderId,String payType){
+    public PaymentResult payOrder(Long userId, Long orderId, String payType) {
         Order order = baseMapper.selectById(orderId);
-        if(order == null){
-            throw new BusinessException(ResultCode.NOT_FIND,"订单不存在");
+        if (order == null) {
+            throw new BusinessException(ResultCode.NOT_FIND, "订单不存在");
         }
-        if(!order.getUserId().equals(userId)){
-            throw new BusinessException(ResultCode.FORBIDDEN,"无权操作该订单");
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权操作该订单");
         }
-        if(order.getStatus() != OrderStatus.PENDING.getCode()){
-            throw new BusinessException(ResultCode.FAIL,"订单状态异常，无法支付");
+        if (order.getStatus() != OrderStatus.PENDING.getCode()) {
+            throw new BusinessException(ResultCode.FAIL, "订单状态异常，无法支付");
         }
 
-        boolean paid = paymentStrategyHolder.get(payType)
-                .pay(orderId,userId,order.getTotalAmount());
-        if(!paid){
-            throw new BusinessException(ResultCode.FAIL,"支付失败");
+        /**只发起支付，返回支付载体（含支付页链接），真正的收款确认交给回调 completePayment*/
+        PaymentResult result = paymentStrategyHolder.get(payType)
+                .pay(orderId, userId, order.getTotalAmount());
+        return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void completePayment(Long orderId) {
+        Order order = baseMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException(ResultCode.NOT_FIND, "订单不存在");
+        }
+        /**幂等：已支付直接返回，避免支付平台重复回调时重复确认库存*/
+        if (order.getStatus() == OrderStatus.PAID.getCode()) {
+            return;
+        }
+        if (order.getStatus() != OrderStatus.PENDING.getCode()) {
+            throw new BusinessException(ResultCode.FAIL, "订单状态异常，无法完成支付");
         }
 
         QueryWrapper<OrderItem> qw = new QueryWrapper<>();
-        qw.eq("order_id",orderId);
+        qw.eq("order_id", orderId);
         List<OrderItem> items = orderItemMapper.selectList(qw);
-        for(OrderItem item : items){
-            stockService.confirm(item.getProductId(),item.getQuantity());
+        for (OrderItem item : items) {
+            stockService.confirm(item.getProductId(), item.getQuantity());
         }
 
         Order upd = new Order();
@@ -165,7 +181,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         upd.setStatus(OrderStatus.PAID.getCode());
         upd.setUpdateTime(LocalDateTime.now());
         baseMapper.updateById(upd);
-        return getOrderDetail(userId,orderId);
     }
 
     @Override

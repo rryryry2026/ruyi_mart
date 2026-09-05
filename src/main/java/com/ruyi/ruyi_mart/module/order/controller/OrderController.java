@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.common.result.Result;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
+import com.ruyi.ruyi_mart.module.payment.vo.PaymentResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -36,9 +37,10 @@ public class OrderController {
     }
 
     @PostMapping("/pay/{orderId}")
-    public Result<OrderVO> pay(@PathVariable Long orderId,@RequestParam(required = false,defaultValue = "MOCK") String payType){
+    public Result<PaymentResult> pay(@PathVariable Long orderId, @RequestParam(required = false,defaultValue = "MOCK") String payType){
         return Result.success(orderService.payOrder(currentUserId(),orderId,payType));
     }
+
 
     @PostMapping("/cancel/{orderId}")
     public Result<OrderVO> cancel(@PathVariable Long orderId){
