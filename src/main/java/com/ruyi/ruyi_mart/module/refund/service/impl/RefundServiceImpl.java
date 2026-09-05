@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
+import com.ruyi.ruyi_mart.module.coupon.entity.CouponOrderRel;
+import com.ruyi.ruyi_mart.module.coupon.mapper.CouponOrderRelMapper;
+import com.ruyi.ruyi_mart.module.coupon.service.CouponUserService;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
 import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
@@ -31,6 +34,11 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
     private OrderItemMapper orderItemMapper;
     @Autowired
     private StockService stockService;
+    @Autowired
+    private CouponUserService couponUserService;
+    @Autowired
+    private CouponOrderRelMapper couponOrderRelMapper;
+
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -106,6 +114,14 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
         for(OrderItem item : items){
             stockService.refund(item.getProductId(),item.getQuantity());
         }
+
+        QueryWrapper<CouponOrderRel> relQw = new QueryWrapper<>();
+        relQw.eq("order_id", orderId).eq("rel_status", 1);
+        List<CouponOrderRel> rels = couponOrderRelMapper.selectList(relQw);
+        for (CouponOrderRel rel : rels) {
+            couponUserService.refundRollback(rel.getUserCouponId());
+        }
+
         Order updOrder = new Order();
         updOrder.setId(orderId);
         updOrder.setStatus(OrderStatus.REFUNDED.getCode());

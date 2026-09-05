@@ -145,7 +145,11 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         if (coupon == null) {
             throw new RuntimeException("优惠券模板不存在");
         }
-        BigDecimal discount = calcDiscount(coupon, dto.getOrderItemId());
+        BigDecimal discount = calcDiscount(coupon, dto.getOrderAmount());
+        if (discount == null || discount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("该优惠券不满足使用条件或抵扣金额为0");
+        }
+
         userCoupon.setUseStatus(CouponUseStatusEnum.USED);
         userCoupon.setUpdateTime(now);
         updateById(userCoupon);
@@ -210,27 +214,45 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         }
     }
 
-    private BigDecimal calcDiscount(Coupon coupon, Long orderItemId) {
+    private BigDecimal calcDiscount(Coupon coupon, BigDecimal orderAmount) {
         CouponTypeEnum type = coupon.getCouponType();
+
+        if (orderAmount == null) {
+            if (type == CouponTypeEnum.DISCOUNT) {
+                return coupon.getMaxDiscount() == null ? BigDecimal.ZERO : coupon.getMaxDiscount();
+            }
+            return coupon.getFaceValue() == null ? BigDecimal.ZERO : coupon.getFaceValue();
+        }
+
         if (type == CouponTypeEnum.NO_THRESHOLD) {
             return coupon.getFaceValue() == null ? BigDecimal.ZERO : coupon.getFaceValue();
         }
+
         if (type == CouponTypeEnum.FULL_REDUCTION) {
+            BigDecimal minSpend = coupon.getMinSpend() == null ? BigDecimal.ZERO : coupon.getMinSpend();
+            if (orderAmount.compareTo(minSpend) < 0) {
+                return BigDecimal.ZERO;
+            }
             return coupon.getFaceValue() == null ? BigDecimal.ZERO : coupon.getFaceValue();
         }
-        if (type == CouponTypeEnum.DISCOUNT) {
-            BigDecimal rate = coupon.getDiscountRate() == null ? BigDecimal.ONE : coupon.getDiscountRate();
-            BigDecimal divisor = BigDecimal.valueOf(10);
-            BigDecimal percent = rate.divide(divisor, 4, java.math.RoundingMode.HALF_UP);
-            BigDecimal maxDiscount = coupon.getMaxDiscount() == null ? BigDecimal.ZERO : coupon.getMaxDiscount();
 
-            if (orderItemId != null && orderItemId > 0) {
-                return maxDiscount;
+        if (type == CouponTypeEnum.DISCOUNT) {
+            BigDecimal rate = coupon.getDiscountRate() == null ? BigDecimal.TEN : coupon.getDiscountRate();
+            BigDecimal percent = rate.divide(BigDecimal.TEN, 4, java.math.RoundingMode.HALF_UP);
+            BigDecimal discount = orderAmount.multiply(BigDecimal.ONE.subtract(percent));
+            discount = discount.setScale(2, java.math.RoundingMode.HALF_UP);
+            BigDecimal maxDiscount = coupon.getMaxDiscount() == null ? BigDecimal.ZERO : coupon.getMaxDiscount();
+            if (maxDiscount.compareTo(BigDecimal.ZERO) > 0 && discount.compareTo(maxDiscount) > 0) {
+                discount = maxDiscount;
             }
-            return maxDiscount;
+            if (discount.compareTo(orderAmount) > 0) {
+                discount = orderAmount;
+            }
+            return discount;
         }
 
         return coupon.getFaceValue() == null ? BigDecimal.ZERO : coupon.getFaceValue();
     }
+
 
 }

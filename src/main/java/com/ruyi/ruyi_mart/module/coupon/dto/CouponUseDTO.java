@@ -4,6 +4,8 @@ package com.ruyi.ruyi_mart.module.coupon.dto;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.math.BigDecimal;
+
 /**
  * 用户端核销优惠券入参（结算时使用）
  */
@@ -21,4 +23,7 @@ public class CouponUseDTO {
 
     /**订单项ID（单品券核销用，全场券可空）*/
     private Long orderItemId;
+
+    /**订单金额（结算时传，用于计算折扣券的真实抵扣额；不传则按面值兜底）*/
+    private BigDecimal orderAmount;
 }

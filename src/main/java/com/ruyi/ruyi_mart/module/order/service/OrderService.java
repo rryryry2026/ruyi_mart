@@ -2,6 +2,7 @@ package com.ruyi.ruyi_mart.module.order.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ruyi.ruyi_mart.module.order.dto.OrderCreateDTO;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.payment.vo.PaymentResult;
@@ -10,8 +11,9 @@ import java.util.List;
 
 public interface OrderService extends IService<Order> {
 
-    /**创建订单*/
-    OrderVO createOrder(Long userId);
+    /**创建订单（dto 携带优惠券等结算信息）*/
+    OrderVO createOrder(Long userId, OrderCreateDTO dto);
+
 
     /**订单列表*/
     List<OrderVO> listOrders(Long userId);

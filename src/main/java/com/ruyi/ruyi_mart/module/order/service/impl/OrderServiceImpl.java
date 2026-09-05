@@ -7,6 +7,9 @@ import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.cart.service.CartService;
 import com.ruyi.ruyi_mart.module.cart.vo.CartItemVO;
+import com.ruyi.ruyi_mart.module.coupon.dto.CouponUseDTO;
+import com.ruyi.ruyi_mart.module.coupon.service.CouponUserService;
+import com.ruyi.ruyi_mart.module.order.dto.OrderCreateDTO;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
 import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
@@ -42,10 +45,12 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private StockService stockService;
     @Autowired
     private OrderEventProducer orderEventProducer;
+    @Autowired
+    private CouponUserService couponUserService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public OrderVO createOrder(Long userId){
+    public OrderVO createOrder(Long userId, OrderCreateDTO dto){
         List<CartItemVO> cartItems = cartService.list(userId,null);
         if(cartItems == null || cartItems.isEmpty()){
             throw new BusinessException(ResultCode.NOT_FIND,"购物车为空，无法下单");
@@ -86,7 +91,19 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             item.setQuantity(ci.getQuantity());
             item.setSubtotal(subtotal);
             itemList.add(item);
+        }
 
+        BigDecimal couponDiscount = BigDecimal.ZERO;
+        if (dto != null && dto.getUserCouponId() != null) {
+            CouponUseDTO useDTO = new CouponUseDTO();
+            useDTO.setUserCouponId(dto.getUserCouponId());
+            useDTO.setOrderId(order.getId());
+            useDTO.setOrderAmount(totalAmount); // 用订单原价计算真实折扣
+            couponDiscount = couponUserService.useCoupon(userId, useDTO);
+        }
+        totalAmount = totalAmount.subtract(couponDiscount);
+        if (totalAmount.compareTo(BigDecimal.ZERO) < 0) {
+            totalAmount = BigDecimal.ZERO;
         }
 
         order.setTotalAmount(totalAmount);
@@ -109,6 +126,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         vo.setItems(itemList);
         return vo;
     }
+
 
     @Override
     public List<OrderVO> listOrders(Long userId){

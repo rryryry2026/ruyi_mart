@@ -2,6 +2,7 @@ package com.ruyi.ruyi_mart.module.order.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.common.result.Result;
+import com.ruyi.ruyi_mart.module.order.dto.OrderCreateDTO;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.payment.vo.PaymentResult;
@@ -22,8 +23,8 @@ public class OrderController {
     private OrderService orderService;
 
     @PostMapping("/create")
-    public Result<OrderVO> create(){
-        return Result.success(orderService.createOrder(currentUserId()));
+    public Result<OrderVO> create(@RequestBody OrderCreateDTO dto){
+        return Result.success(orderService.createOrder(currentUserId(), dto));
     }
 
     @GetMapping("/list")
