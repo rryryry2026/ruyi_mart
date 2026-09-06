@@ -21,6 +21,7 @@ import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.payment.holder.PaymentStrategyHolder;
 import com.ruyi.ruyi_mart.module.payment.vo.PaymentResult;
 import com.ruyi.ruyi_mart.module.stock.service.StockService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements OrderService {
 
     @Autowired
@@ -114,7 +116,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         cartService.clearKeepStock(userId,null);
-        orderEventProducer.sendCloseDelay(order.getId());
+        try {
+            orderEventProducer.sendCloseDelay(order.getId());
+        } catch (Exception e) {
+            log.error("发送关单延迟消息失败,订单{}将由定时任务兜底关闭", order.getId(), e);
+        }
 
         OrderVO vo = new OrderVO();
         vo.setId(order.getId());
