@@ -18,18 +18,21 @@ public class ProductController {
     private ProductService productService;
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<Long> add(@RequestBody Product product){
         productService.save(product);
         return Result.success(product.getId());
     }
 
     @PutMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<Void> update(@RequestBody Product product){
         productService.updateById(product);
         return Result.success();
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<Void> delete(@PathVariable Long id){
         productService.removeById(id);
         return Result.success();

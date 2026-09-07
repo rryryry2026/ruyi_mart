@@ -55,7 +55,18 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // ★ 放行浏览器 OPTIONS 预检请求，否则预检会被拦截
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/user/login","/user/register","/user/refresh","/cart/**","/payment/**").permitAll()
+                        // 鉴权相关
+                        .requestMatchers("/user/login", "/user/register", "/user/refresh").permitAll()
+                        // 游客可浏览的开放接口（电商消费端核心）
+                        .requestMatchers("/banner/**").permitAll()
+                        .requestMatchers("/category/**").permitAll()
+                        .requestMatchers("/product/**").permitAll()
+                        .requestMatchers("/stock/**").permitAll()
+                        .requestMatchers("/review/first/page", "/review/count", "/review/second/page").permitAll()
+                        // 购物车（游客可通过 X-Guest-Id 访问）、支付（含 mock 回调）
+                        .requestMatchers("/cart/**", "/payment/**").permitAll()
+                        // Swagger / API 文档
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
