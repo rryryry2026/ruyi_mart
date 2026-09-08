@@ -1,6 +1,8 @@
 package com.ruyi.ruyi_mart.module.stock.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.module.stock.entity.Stock;
+import com.ruyi.ruyi_mart.module.stock.vo.ProductStockVO;
 
 public interface StockService {
 
@@ -21,4 +23,7 @@ public interface StockService {
 
     /**查询商品库存明细（total/available/locked）*/
     Stock getByProductId(Long productId);
+
+    /**管理端：商品维度库存分页（无库存记录的商品也返回，便于初始化）*/
+    Page<ProductStockVO> adminStockPage(String keyword, Long categoryId, int pageNum, int pageSize);
 }

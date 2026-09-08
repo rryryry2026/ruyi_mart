@@ -9,6 +9,7 @@ import com.ruyi.ruyi_mart.module.cart.service.CartService;
 import com.ruyi.ruyi_mart.module.cart.vo.CartItemVO;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponUseDTO;
 import com.ruyi.ruyi_mart.module.coupon.service.CouponUserService;
+import com.ruyi.ruyi_mart.module.order.dto.OrderAdminQueryDTO;
 import com.ruyi.ruyi_mart.module.order.dto.OrderCreateDTO;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
@@ -17,21 +18,29 @@ import com.ruyi.ruyi_mart.module.order.mapper.OrderItemMapper;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
 import com.ruyi.ruyi_mart.module.order.mq.OrderEventProducer;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
+import com.ruyi.ruyi_mart.module.order.vo.OrderAdminVO;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.payment.holder.PaymentStrategyHolder;
 import com.ruyi.ruyi_mart.module.payment.vo.PaymentResult;
 import com.ruyi.ruyi_mart.module.stock.service.StockService;
+import com.ruyi.ruyi_mart.module.user.entity.User;
+import com.ruyi.ruyi_mart.module.user.mapper.UserMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -49,6 +58,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private OrderEventProducer orderEventProducer;
     @Autowired
     private CouponUserService couponUserService;
+    @Autowired
+    private UserMapper userMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -311,6 +322,78 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return voPage;
     }
 
+
+    @Override
+    public Page<OrderAdminVO> adminListOrders(OrderAdminQueryDTO dto){
+        Page<Order> page = new Page<>(dto.getPageNum(), dto.getPageSize());
+        QueryWrapper<Order> qw = new QueryWrapper<>();
+        if(StringUtils.hasText(dto.getOrderNo())){
+            qw.eq("order_no", dto.getOrderNo());
+        }
+        if(dto.getStatus() != null){
+            qw.eq("status", dto.getStatus());
+        }
+        if(dto.getStartTime() != null){
+            qw.ge("create_time", dto.getStartTime().atStartOfDay());
+        }
+        if(dto.getEndTime() != null){
+            qw.le("create_time", dto.getEndTime().atTime(LocalTime.MAX));
+        }
+        if(StringUtils.hasText(dto.getKeyword())){
+            // 先按买家用户名/昵称解析出用户ID集合，再过滤订单，保证分页总数正确
+            List<Long> userIds = userMapper.selectList(new QueryWrapper<User>()
+                            .like("username", dto.getKeyword())
+                            .or().like("nickname", dto.getKeyword()))
+                    .stream().map(User::getId).collect(Collectors.toList());
+            if(userIds.isEmpty()){
+                return new Page<>(dto.getPageNum(), dto.getPageSize());
+            }
+            qw.in("user_id", userIds);
+        }
+        qw.orderByDesc("create_time");
+        baseMapper.selectPage(page, qw);
+
+        Page<OrderAdminVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        List<OrderAdminVO> vos = new ArrayList<>();
+        if(!page.getRecords().isEmpty()){
+            Map<Long, User> userMap = userMapper.selectBatchIds(
+                            page.getRecords().stream().map(Order::getUserId).collect(Collectors.toList()))
+                    .stream().collect(Collectors.toMap(User::getId, Function.identity()));
+            for(Order o : page.getRecords()){
+                vos.add(toAdminVO(o, userMap.get(o.getUserId())));
+            }
+        }
+        voPage.setRecords(vos);
+        return voPage;
+    }
+
+    @Override
+    public OrderAdminVO adminGetOrderDetail(Long orderId){
+        Order order = baseMapper.selectById(orderId);
+        if(order == null){
+            throw new BusinessException(ResultCode.NOT_FIND, "订单不存在");
+        }
+        User user = userMapper.selectById(order.getUserId());
+        return toAdminVO(order, user);
+    }
+
+    private OrderAdminVO toAdminVO(Order order, User user){
+        OrderAdminVO vo = new OrderAdminVO();
+        vo.setId(order.getId());
+        vo.setOrderNo(order.getOrderNo());
+        vo.setUserId(order.getUserId());
+        vo.setTotalAmount(order.getTotalAmount());
+        vo.setStatus(order.getStatus());
+        vo.setCreateTime(order.getCreateTime());
+        QueryWrapper<OrderItem> qw = new QueryWrapper<>();
+        qw.eq("order_id", order.getId());
+        vo.setItems(orderItemMapper.selectList(qw));
+        if(user != null){
+            vo.setBuyerUsername(user.getUsername());
+            vo.setBuyerNickname(user.getNickname());
+        }
+        return vo;
+    }
 
     private OrderVO toVO(Order order){
         OrderVO vo = new OrderVO();

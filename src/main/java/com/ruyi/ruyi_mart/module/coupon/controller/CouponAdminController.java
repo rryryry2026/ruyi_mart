@@ -33,6 +33,12 @@ public class CouponAdminController {
         return Result.success(couponService.listCoupons(dto));
     }
 
+    /**优惠券详情（管理端编辑回显用）*/
+    @GetMapping("/{id}")
+    public Result<?> detail(@PathVariable Long id) {
+        return Result.success(couponService.getById(id));
+    }
+
     /**修改优惠券*/
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable Long id, @Valid @RequestBody CouponCreateDTO dto) {

@@ -1,6 +1,8 @@
 package com.ruyi.ruyi_mart.module.refund.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.module.refund.entity.Refund;
+import com.ruyi.ruyi_mart.module.refund.vo.RefundAdminVO;
 
 import java.util.List;
 
@@ -21,5 +23,7 @@ public interface RefundService {
     //管理员拒绝
     Refund reject(Long refundId,String rejectReason);
 
+    //管理端：全量退款单分页（不限定申请人），带关联订单号与买家昵称
+    Page<RefundAdminVO> adminPageRefunds(Integer status, int pageNum, int pageSize);
 
 }

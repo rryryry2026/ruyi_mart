@@ -2,8 +2,10 @@ package com.ruyi.ruyi_mart.module.order.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ruyi.ruyi_mart.module.order.dto.OrderAdminQueryDTO;
 import com.ruyi.ruyi_mart.module.order.dto.OrderCreateDTO;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
+import com.ruyi.ruyi_mart.module.order.vo.OrderAdminVO;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.payment.vo.PaymentResult;
 
@@ -42,5 +44,10 @@ public interface OrderService extends IService<Order> {
     /**用户确认收货*/
     OrderVO confirmReceive(Long userId, Long orderId);
 
+    /**管理端：全量订单分页（订单号/买家/状态/时间范围筛选，不限定买家）*/
+    Page<OrderAdminVO> adminListOrders(OrderAdminQueryDTO dto);
+
+    /**管理端：订单详情（管理员视角，不校验订单归属）*/
+    OrderAdminVO adminGetOrderDetail(Long orderId);
 
 }

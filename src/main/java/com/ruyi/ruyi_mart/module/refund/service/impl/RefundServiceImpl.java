@@ -1,6 +1,7 @@
 package com.ruyi.ruyi_mart.module.refund.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
@@ -16,14 +17,23 @@ import com.ruyi.ruyi_mart.module.refund.entity.Refund;
 import com.ruyi.ruyi_mart.module.refund.enums.RefundStatus;
 import com.ruyi.ruyi_mart.module.refund.mapper.RefundMapper;
 import com.ruyi.ruyi_mart.module.refund.service.RefundService;
+import com.ruyi.ruyi_mart.module.refund.vo.RefundAdminVO;
 import com.ruyi.ruyi_mart.module.stock.service.StockService;
+import com.ruyi.ruyi_mart.module.user.entity.User;
+import com.ruyi.ruyi_mart.module.user.mapper.UserMapper;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> implements RefundService {
@@ -38,6 +48,8 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
     private CouponUserService couponUserService;
     @Autowired
     private CouponOrderRelMapper couponOrderRelMapper;
+    @Autowired
+    private UserMapper userMapper;
 
 
     @Override
@@ -149,6 +161,45 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
         refund.setUpdateTime(LocalDateTime.now());
         baseMapper.updateById(refund);
         return refund;
+    }
+
+    @Override
+    public Page<RefundAdminVO> adminPageRefunds(Integer status, int pageNum, int pageSize){
+        Page<Refund> page = new Page<>(pageNum, pageSize);
+        QueryWrapper<Refund> qw = new QueryWrapper<>();
+        if(status != null){
+            qw.eq("status", status);
+        }
+        qw.orderByDesc("create_time");
+        this.page(page, qw);
+
+        Page<RefundAdminVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        List<RefundAdminVO> vos = new ArrayList<>();
+        if(!page.getRecords().isEmpty()){
+            Set<Long> orderIds = page.getRecords().stream()
+                    .map(Refund::getOrderId).collect(Collectors.toSet());
+            Map<Long, Order> orderMap = orderMapper.selectBatchIds(orderIds).stream()
+                    .collect(Collectors.toMap(Order::getId, Function.identity()));
+            Set<Long> userIds = page.getRecords().stream()
+                    .map(Refund::getUserId).collect(Collectors.toSet());
+            Map<Long, User> userMap = userMapper.selectBatchIds(userIds).stream()
+                    .collect(Collectors.toMap(User::getId, Function.identity()));
+            for(Refund r : page.getRecords()){
+                RefundAdminVO vo = new RefundAdminVO();
+                BeanUtils.copyProperties(r, vo);
+                Order order = orderMap.get(r.getOrderId());
+                if(order != null){
+                    vo.setOrderNo(order.getOrderNo());
+                }
+                User user = userMap.get(r.getUserId());
+                if(user != null){
+                    vo.setBuyerNickname(user.getNickname());
+                }
+                vos.add(vo);
+            }
+        }
+        voPage.setRecords(vos);
+        return voPage;
     }
 
     private String generateRefundNo() {
