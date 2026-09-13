@@ -5,6 +5,7 @@ import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
 import com.ruyi.ruyi_mart.module.refund.entity.Refund;
+import com.ruyi.ruyi_mart.module.refund.enums.RefundStatus;
 import com.ruyi.ruyi_mart.module.refund.mapper.RefundMapper;
 import com.ruyi.ruyi_mart.module.stock.entity.Stock;
 import com.ruyi.ruyi_mart.module.stock.mapper.StockMapper;
@@ -54,7 +55,7 @@ public class StatsServiceImpl implements StatsService {
                 new QueryWrapper<Order>().eq("status", OrderStatus.PAID.getCode())));
 
         vo.setPendingRefundCount(refundMapper.selectCount(
-                new QueryWrapper<Refund>().eq("status", 0)));
+                new QueryWrapper<Refund>().eq("status", RefundStatus.PENDING.getCode())));
 
         vo.setLowStockCount(stockMapper.selectCount(
                 new QueryWrapper<Stock>().le("available", LOW_STOCK_THRESHOLD)));

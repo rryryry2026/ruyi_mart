@@ -1,12 +1,15 @@
 package com.ruyi.ruyi_mart.module.review.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ruyi.ruyi_mart.module.review.dto.AdminReplyDTO;
 import com.ruyi.ruyi_mart.module.review.dto.AppendProductFirstCommentDTO;
 import com.ruyi.ruyi_mart.module.review.dto.FirstProductCommentDTO;
+import com.ruyi.ruyi_mart.module.review.dto.ReviewAdminQueryDTO;
 import com.ruyi.ruyi_mart.module.review.dto.SecondProductCommentDTO;
 import com.ruyi.ruyi_mart.module.review.vo.ProductAppendCommentVO;
 import com.ruyi.ruyi_mart.module.review.vo.ProductFirstCommentVO;
 import com.ruyi.ruyi_mart.module.review.vo.ProductSecondCommentVO;
+import com.ruyi.ruyi_mart.module.review.vo.ReviewAdminVO;
 
 public interface ProductCommentService {
 
@@ -75,4 +78,32 @@ public interface ProductCommentService {
      * @param isLike     1=点赞 0=取消点赞
      */
     void updateProductCommentLike(Long userId, Long commentId, Integer isLike);
+
+    /**
+     * 管理端：评价分页（含已隐藏的评论，可按商品/内容/状态/好评差评筛选）
+     * @param dto 查询条件
+     * @return 一级评论分页（含商品名与回复数）
+     */
+    Page<ReviewAdminVO> adminPageComments(ReviewAdminQueryDTO dto);
+
+    /**
+     * 管理端：显示/隐藏评论（隐藏后消费端查询不到）
+     * @param commentId 评论ID
+     * @param status    1=显示 0=隐藏
+     */
+    void updateCommentStatus(Long commentId, Integer status);
+
+    /**
+     * 管理端：删除评论（一级评论连带删除其二级回复、追评与点赞记录）
+     * @param commentId 评论ID
+     */
+    void deleteComment(Long commentId);
+
+    /**
+     * 管理端：商家回复
+     * @param adminUserId 当前管理员用户ID（昵称从数据库取，不信任前端）
+     * @param dto         回复内容与被回复的一级评论ID
+     * @return 新回复ID
+     */
+    Long adminReply(Long adminUserId, AdminReplyDTO dto);
 }

@@ -46,6 +46,11 @@ public class LoginService {
             throw new BusinessException(ResultCode.UNAUTHORIZED,"用户名或密码错误");
         }
 
+        // 被管理员禁用的账号不允许登录（status: 1=正常 0=禁用，null 视为正常）
+        if(user.getStatus() != null && user.getStatus() == 0){
+            throw new BusinessException(ResultCode.FORBIDDEN,"账号已被禁用，请联系管理员");
+        }
+
         String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getUsername(),user.getUserType());
         String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(),user.getUserType());
 
@@ -76,6 +81,16 @@ public class LoginService {
         String stored = (String) redissonClient.getBucket(redisKey).get();
         if(stored == null || !stored.equals(refreshToken)){
             throw new BusinessException(ResultCode.UNAUTHORIZED,"refreshToken 已失效，请重新登录");
+        }
+
+        // 续期时也要复核账号状态，避免禁用后靠 refreshToken 继续换取新 token
+        User current = userMapper.selectById(userId);
+        if(current == null){
+            throw new BusinessException(ResultCode.UNAUTHORIZED,"用户不存在，请重新登录");
+        }
+        if(current.getStatus() != null && current.getStatus() == 0){
+            redissonClient.getBucket(redisKey).delete();
+            throw new BusinessException(ResultCode.FORBIDDEN,"账号已被禁用，请联系管理员");
         }
 
         String newAccessToken = jwtUtil.generateAccessToken(userId,username,userType);
