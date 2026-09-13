@@ -50,11 +50,10 @@ public class StockServiceImpl implements StockService {
             s.setUpdateTime(LocalDateTime.now());
             stockMapper.insert(s);
         } else {
-            int diff = total - existing.getTotal();
-            existing.setTotal(total);
-            existing.setAvailable(existing.getAvailable() + diff);
-            existing.setUpdateTime(LocalDateTime.now());
-            stockMapper.updateById(existing);
+            // 用单条原子 SQL 重设，不用 updateById：Stock 带 @Version 但项目未注册
+            // OptimisticLockerInnerInterceptor，updateById 会因缺少 MP_OPTLOCK_VERSION_ORIGINAL
+            // 参数抛 BindingException（表现为 HTTP 500）
+            stockMapper.resetTotal(productId, total);
         }
     }
 
