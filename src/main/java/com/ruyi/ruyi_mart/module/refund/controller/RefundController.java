@@ -1,6 +1,7 @@
 package com.ruyi.ruyi_mart.module.refund.controller;
 
 import com.ruyi.ruyi_mart.common.result.Result;
+import com.ruyi.ruyi_mart.module.log.annotation.OpLog;
 import com.ruyi.ruyi_mart.module.refund.entity.Refund;
 import com.ruyi.ruyi_mart.module.refund.service.RefundService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,12 +42,14 @@ public class RefundController {
 
     @PostMapping("/approve/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @OpLog(module = "退款审核", action = "同意退款")
     public Result<Refund> approve(@PathVariable Long id){
         return Result.success(refundService.approve(id));
     }
 
     @PostMapping("/reject/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @OpLog(module = "退款审核", action = "拒绝退款")
     public Result<Refund> reject(@PathVariable Long id,
                                  @RequestParam String reason){
         return Result.success(refundService.reject(id, reason));

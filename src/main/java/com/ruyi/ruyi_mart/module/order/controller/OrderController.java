@@ -2,6 +2,7 @@ package com.ruyi.ruyi_mart.module.order.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.common.result.Result;
+import com.ruyi.ruyi_mart.module.log.annotation.OpLog;
 import com.ruyi.ruyi_mart.module.order.dto.OrderCreateDTO;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
@@ -62,6 +63,7 @@ public class OrderController {
 
     @PostMapping("/ship/{orderId}")
     @PreAuthorize("hasRole('ADMIN')")
+    @OpLog(module = "订单管理", action = "发货")
     public Result<OrderVO> ship(@PathVariable Long orderId){
         return Result.success(orderService.shipOrder(orderId));
     }

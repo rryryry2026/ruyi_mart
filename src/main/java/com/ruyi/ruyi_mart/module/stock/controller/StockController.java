@@ -1,6 +1,7 @@
 package com.ruyi.ruyi_mart.module.stock.controller;
 
 import com.ruyi.ruyi_mart.common.result.Result;
+import com.ruyi.ruyi_mart.module.log.annotation.OpLog;
 import com.ruyi.ruyi_mart.module.stock.entity.Stock;
 import com.ruyi.ruyi_mart.module.stock.service.StockService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ public class StockController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/init")
+    @OpLog(module = "库存管理", action = "设置库存")
     public Result<Void> init(@RequestParam Long productId,@RequestParam Integer total){
         stockService.initStock(productId,total);
         return Result.success();
