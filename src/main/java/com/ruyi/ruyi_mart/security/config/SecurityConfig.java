@@ -63,6 +63,10 @@ public class SecurityConfig {
                         .requestMatchers("/product/**").permitAll()
                         .requestMatchers("/stock/**").permitAll()
                         .requestMatchers("/review/first/page", "/review/count", "/review/second/page").permitAll()
+                        // 公告 / 热搜词：与 /banner 一样，读接口开放给消费端，
+                        // 写接口（增删改、改状态）由各自 Controller 上的 @PreAuthorize 限制为管理员
+                        .requestMatchers("/notice/**").permitAll()
+                        .requestMatchers("/hot-keyword/**").permitAll()
                         // 购物车（游客可通过 X-Guest-Id 访问）
                         .requestMatchers("/cart/**").permitAll()
                         // 支付回调类接口：模拟真实支付平台的异步通知，本身不带用户登录态，
