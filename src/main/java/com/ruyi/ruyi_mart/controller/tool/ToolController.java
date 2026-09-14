@@ -6,9 +6,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -21,13 +21,23 @@ public class ToolController {
     @Autowired
     private AliyunOSSUtils aliyunOSSUtils;
 
-    // 接收前端上传的图片文件，转存到 OSS，返回可访问的 URL
+    /**
+     * 图片上传：转存到 OSS，返回可访问的 URL。
+     *
+     * 不再限管理员——消费端发表评价需要晒图，个人端必须能上传。
+     * 但放开的同时，文件校验改由 AliyunOSSUtils.upload 承担
+     * （非空、大小上限、类型白名单、文件头校验），
+     * 否则就等于对外开放了一个任意文件上传入口。
+     * 本接口未加入 SecurityConfig 的放行名单，匿名访问会被拦成 401。
+     *
+     * @param dir 存放目录，仅允许 review / product / banner / common
+     */
     @PostMapping("/upload/image")
-    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "图片上传")
-    public Result<String> upload(MultipartFile file) {
-        log.info("图片上传: {}", file.getOriginalFilename());
-        String url = aliyunOSSUtils.upload(file);
-        return Result.success(url);
+    public Result<String> upload(MultipartFile file,
+                                 @RequestParam(required = false, defaultValue = "common") String dir) {
+        log.info("图片上传: dir={}, name={}, size={}", dir, file == null ? null : file.getOriginalFilename(),
+                file == null ? 0 : file.getSize());
+        return Result.success(aliyunOSSUtils.upload(file, dir));
     }
 }
