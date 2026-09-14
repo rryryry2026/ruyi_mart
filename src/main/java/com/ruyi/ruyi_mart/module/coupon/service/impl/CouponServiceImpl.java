@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ruyi.ruyi_mart.common.enums.ResultCode;
+import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponCreateDTO;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponQueryDTO;
 import com.ruyi.ruyi_mart.module.coupon.entity.Coupon;
@@ -64,7 +66,7 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
     public void updateCoupon(Long id, CouponCreateDTO dto){
         Coupon coupon = getById(id);
         if(coupon == null){
-            throw new RuntimeException("优惠券不存在: " + id);
+            throw new BusinessException(ResultCode.FAIL, "优惠券不存在: " + id);
         }
         coupon.setActivityName(dto.getActivityName());
         coupon.setCouponType(dto.getCouponType());

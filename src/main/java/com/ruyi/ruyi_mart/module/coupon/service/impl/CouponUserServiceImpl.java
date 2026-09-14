@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ruyi.ruyi_mart.common.enums.ResultCode;
+import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponReceiveDTO;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponUseDTO;
 import com.ruyi.ruyi_mart.module.coupon.entity.Coupon;
@@ -18,6 +20,8 @@ import com.ruyi.ruyi_mart.module.coupon.mapper.CouponScopeDetailMapper;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponUserMapper;
 import com.ruyi.ruyi_mart.module.coupon.service.CouponService;
 import com.ruyi.ruyi_mart.module.coupon.service.CouponUserService;
+import com.ruyi.ruyi_mart.module.coupon.vo.CouponTemplateVO;
+import com.ruyi.ruyi_mart.module.coupon.vo.CouponUserVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,7 +29,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -46,14 +55,14 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     public void receiveCoupon(Long userId, CouponReceiveDTO dto){
         Coupon coupon = couponService.getById(dto.getCouponId());
         if(coupon == null){
-            throw new RuntimeException("优惠券不存在");
+            throw new BusinessException(ResultCode.FAIL, "优惠券不存在");
         }
         if(coupon.getStatus() == null || coupon.getStatus() != 1){
-            throw new RuntimeException("优惠券不在发放中");
+            throw new BusinessException(ResultCode.FAIL, "优惠券不在发放中");
         }
         if(coupon.getTotalQuota() != null && coupon.getTotalQuota() > 0){
             if(coupon.getReceiveQuota() >= coupon.getTotalQuota()){
-                throw new RuntimeException("优惠券已领完");
+                throw new BusinessException(ResultCode.FAIL, "优惠券已领完");
             }
         }
 
@@ -62,7 +71,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
                 .eq(CouponUser::getCouponId, coupon.getId()));
         int limit = coupon.getLimitPerPerson() == null ? 1 : coupon.getLimitPerPerson();
         if (owned >= limit) {
-            throw new RuntimeException("已达到单人领取上限");
+            throw new BusinessException(ResultCode.FAIL, "已达到单人领取上限");
         }
 
         if (coupon.getMutexGroupCode() != null && coupon.getMutexGroupCode() != 0) {
@@ -72,7 +81,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
                 Coupon c = couponService.getById(cu.getCouponId());
                 if (c != null && coupon.getMutexGroupCode().equals(c.getMutexGroupCode())
                         && c.getMutexGroupCode() != 0) {
-                    throw new RuntimeException("与已持有券互斥，不可同时领取");
+                    throw new BusinessException(ResultCode.FAIL, "与已持有券互斥，不可同时领取");
                 }
             }
         }
@@ -103,22 +112,161 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     }
 
     @Override
-    public IPage<CouponUser> myCoupons(Long userId, Integer useStatus, Integer page, Integer size) {
+    public IPage<CouponUserVO> myCoupons(Long userId, Integer useStatus, Integer page, Integer size) {
         Page<CouponUser> p = new Page<>(page == null ? 1 : page, size == null ? 10 : size);
-        return page(p, Wrappers.<CouponUser>lambdaQuery()
+        IPage<CouponUser> entityPage = page(p, Wrappers.<CouponUser>lambdaQuery()
                 .eq(CouponUser::getUserId, userId)
                 .eq(useStatus != null, CouponUser::getUseStatus, useStatus)
                 .orderByDesc(CouponUser::getCreateTime));
+
+        // 批量取券模板，避免逐条查（N+1）
+        Map<Long, Coupon> couponMap = loadCouponMap(entityPage.getRecords());
+        List<CouponUserVO> voList = entityPage.getRecords().stream()
+                .map(cu -> toUserVO(cu, couponMap.get(cu.getCouponId()), null))
+                .collect(Collectors.toList());
+
+        Page<CouponUserVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
+        voPage.setRecords(voList);
+        return voPage;
     }
 
     @Override
-    public List<CouponUser> listAvailable(Long userId) {
+    public List<CouponUserVO> listAvailable(Long userId, BigDecimal orderAmount) {
         LocalDateTime now = LocalDateTime.now();
-        return list(Wrappers.<CouponUser>lambdaQuery()
+        List<CouponUser> mine = list(Wrappers.<CouponUser>lambdaQuery()
                 .eq(CouponUser::getUserId, userId)
                 .eq(CouponUser::getUseStatus, CouponUseStatusEnum.UNUSED)
                 .le(CouponUser::getValidStart, now)
                 .ge(CouponUser::getValidEnd, now));
+
+        Map<Long, Coupon> couponMap = loadCouponMap(mine);
+        List<CouponUserVO> result = new ArrayList<>();
+        for (CouponUser cu : mine) {
+            Coupon coupon = couponMap.get(cu.getCouponId());
+            BigDecimal discount = null;
+            if (orderAmount != null && coupon != null) {
+                discount = calcDiscount(coupon, orderAmount);
+                // 传了订单金额，就把不满足门槛（抵扣为 0）的券滤掉，
+                // 免得结算页列出一堆用不了的券
+                if (discount == null || discount.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+            }
+            result.add(toUserVO(cu, coupon, discount));
+        }
+        return result;
+    }
+
+    @Override
+    public List<CouponTemplateVO> listReceivable(Long userId) {
+        // 发放中、且未被隐藏的券模板
+        List<Coupon> templates = couponService.list(Wrappers.<Coupon>lambdaQuery()
+                .eq(Coupon::getStatus, 1)
+                .eq(Coupon::getIsElimination, 0)
+                .orderByDesc(Coupon::getCreateTime));
+        if (templates.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 当前用户已持有的券，用于算"已领张数"与互斥组
+        List<CouponUser> mine = list(Wrappers.<CouponUser>lambdaQuery()
+                .eq(CouponUser::getUserId, userId));
+        Map<Long, Long> ownedCountMap = mine.stream()
+                .collect(Collectors.groupingBy(CouponUser::getCouponId, Collectors.counting()));
+
+        // 已持有券所属的互斥组
+        Set<Long> heldMutexGroups = new HashSet<>();
+        if (!mine.isEmpty()) {
+            Set<Long> heldCouponIds = mine.stream().map(CouponUser::getCouponId).collect(Collectors.toSet());
+            for (Coupon c : couponService.listByIds(heldCouponIds)) {
+                if (c.getMutexGroupCode() != null && c.getMutexGroupCode() != 0) {
+                    heldMutexGroups.add(c.getMutexGroupCode());
+                }
+            }
+        }
+
+        List<CouponTemplateVO> result = new ArrayList<>();
+        for (Coupon coupon : templates) {
+            int total = coupon.getTotalQuota() == null ? 0 : coupon.getTotalQuota();
+            int received = coupon.getReceiveQuota() == null ? 0 : coupon.getReceiveQuota();
+            Integer remainQuota = total > 0 ? Math.max(0, total - received) : null;
+            if (remainQuota != null && remainQuota <= 0) {
+                continue; // 已领完
+            }
+
+            long owned = ownedCountMap.getOrDefault(coupon.getId(), 0L);
+            int limit = coupon.getLimitPerPerson() == null ? 1 : coupon.getLimitPerPerson();
+
+            // 与 receiveCoupon 的校验保持一致：互斥组里只要已持有任意一张，就不能再领
+            boolean blockedByMutex = coupon.getMutexGroupCode() != null
+                    && coupon.getMutexGroupCode() != 0
+                    && heldMutexGroups.contains(coupon.getMutexGroupCode());
+
+            int remainToReceive = blockedByMutex ? 0 : (int) Math.max(0, limit - owned);
+            if (remainToReceive <= 0) {
+                continue; // 已达单人上限 / 被互斥挡住
+            }
+
+            CouponTemplateVO vo = new CouponTemplateVO();
+            vo.setId(coupon.getId());
+            vo.setCouponNo(coupon.getCouponNo());
+            vo.setActivityName(coupon.getActivityName());
+            vo.setCouponType(coupon.getCouponType());
+            vo.setFaceValue(coupon.getFaceValue());
+            vo.setDiscountRate(coupon.getDiscountRate());
+            vo.setMaxDiscount(coupon.getMaxDiscount());
+            vo.setMinSpend(coupon.getMinSpend());
+            vo.setValidMode(coupon.getValidMode());
+            vo.setValidStart(coupon.getValidStart());
+            vo.setValidEnd(coupon.getValidEnd());
+            vo.setReceiveValidDays(coupon.getReceiveValidDays());
+            vo.setLimitPerPerson(limit);
+            vo.setReceiveQuota(received);
+            vo.setTotalQuota(total);
+            vo.setUseScope(coupon.getUseScope());
+            vo.setOwnedCount((int) owned);
+            vo.setRemainToReceive(remainToReceive);
+            vo.setRemainQuota(remainQuota);
+            result.add(vo);
+        }
+        return result;
+    }
+
+    /** 批量取券模板，避免逐条查询 */
+    private Map<Long, Coupon> loadCouponMap(List<CouponUser> userCoupons) {
+        if (userCoupons == null || userCoupons.isEmpty()) {
+            return Map.of();
+        }
+        Set<Long> ids = userCoupons.stream()
+                .map(CouponUser::getCouponId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return couponService.listByIds(ids).stream()
+                .collect(Collectors.toMap(Coupon::getId, c -> c, (a, b) -> a));
+    }
+
+    private CouponUserVO toUserVO(CouponUser cu, Coupon coupon, BigDecimal discountAmount) {
+        CouponUserVO vo = new CouponUserVO();
+        vo.setId(cu.getId());
+        vo.setCouponId(cu.getCouponId());
+        vo.setUseStatus(cu.getUseStatus());
+        vo.setValidStart(cu.getValidStart());
+        vo.setValidEnd(cu.getValidEnd());
+        vo.setCreateTime(cu.getCreateTime());
+        vo.setDiscountAmount(discountAmount);
+        if (coupon != null) {
+            vo.setActivityName(coupon.getActivityName());
+            vo.setCouponType(coupon.getCouponType());
+            vo.setFaceValue(coupon.getFaceValue());
+            vo.setDiscountRate(coupon.getDiscountRate());
+            vo.setMaxDiscount(coupon.getMaxDiscount());
+            vo.setMinSpend(coupon.getMinSpend());
+            vo.setUseScope(coupon.getUseScope());
+        }
+        return vo;
     }
 
     @Override
@@ -126,28 +274,28 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     public BigDecimal useCoupon(Long userId, CouponUseDTO dto) {
         CouponUser userCoupon = getById(dto.getUserCouponId());
         if (userCoupon == null) {
-            throw new RuntimeException("用户券不存在");
+            throw new BusinessException(ResultCode.FAIL, "用户券不存在");
         }
         if (!userCoupon.getUserId().equals(userId)) {
-            throw new RuntimeException("无权使用该券");
+            throw new BusinessException(ResultCode.FAIL, "无权使用该券");
         }
         if (userCoupon.getUseStatus() != CouponUseStatusEnum.UNUSED) {
-            throw new RuntimeException("该券不可使用");
+            throw new BusinessException(ResultCode.FAIL, "该券不可使用");
         }
         LocalDateTime now = LocalDateTime.now();
         if (userCoupon.getValidStart() != null && now.isBefore(userCoupon.getValidStart())) {
-            throw new RuntimeException("该券未到生效时间");
+            throw new BusinessException(ResultCode.FAIL, "该券未到生效时间");
         }
         if (userCoupon.getValidEnd() != null && now.isAfter(userCoupon.getValidEnd())) {
-            throw new RuntimeException("该券已过期");
+            throw new BusinessException(ResultCode.FAIL, "该券已过期");
         }
         Coupon coupon = couponService.getById(userCoupon.getCouponId());
         if (coupon == null) {
-            throw new RuntimeException("优惠券模板不存在");
+            throw new BusinessException(ResultCode.FAIL, "优惠券模板不存在");
         }
         BigDecimal discount = calcDiscount(coupon, dto.getOrderAmount());
         if (discount == null || discount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("该优惠券不满足使用条件或抵扣金额为0");
+            throw new BusinessException(ResultCode.FAIL, "该优惠券不满足使用条件或抵扣金额为0");
         }
 
         userCoupon.setUseStatus(CouponUseStatusEnum.USED);
