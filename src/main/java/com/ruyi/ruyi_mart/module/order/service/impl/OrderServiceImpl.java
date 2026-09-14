@@ -220,6 +220,20 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void confirmMockPayment(Long userId, Long orderId) {
+        Order order = baseMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException(ResultCode.NOT_FIND, "订单不存在");
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权操作该订单");
+        }
+        /**收款逻辑直接复用回调那一套，避免两处实现日后走偏*/
+        completePayment(orderId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public OrderVO cancelOrder(Long userId,Long orderId){
         Order order = baseMapper.selectById(orderId);
         if(order == null){

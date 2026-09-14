@@ -29,6 +29,13 @@ public interface OrderService extends IService<Order> {
     /**支付平台异步回调：确认收款后置订单为已支付，并确认库存*/
     void completePayment(Long orderId);
 
+    /**
+     * 个人端模拟支付完成。
+     * 项目没有对接真实支付渠道，因此提供这个用户端入口，把"支付成功后回调"这一步显式走完。
+     * 与 completePayment 的区别：必须先校验订单归属，只允许确认自己的订单。
+     */
+    void confirmMockPayment(Long userId, Long orderId);
+
     /**取消订单*/
     OrderVO cancelOrder(Long userId, Long orderId);
 

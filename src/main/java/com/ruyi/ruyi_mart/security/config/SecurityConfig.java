@@ -63,8 +63,13 @@ public class SecurityConfig {
                         .requestMatchers("/product/**").permitAll()
                         .requestMatchers("/stock/**").permitAll()
                         .requestMatchers("/review/first/page", "/review/count", "/review/second/page").permitAll()
-                        // 购物车（游客可通过 X-Guest-Id 访问）、支付（含 mock 回调）
-                        .requestMatchers("/cart/**", "/payment/**").permitAll()
+                        // 购物车（游客可通过 X-Guest-Id 访问）
+                        .requestMatchers("/cart/**").permitAll()
+                        // 支付回调类接口：模拟真实支付平台的异步通知，本身不带用户登录态，
+                        // 由各自的 @PreAuthorize 限制为管理员调用。
+                        // 这里刻意不写成 /payment/**：个人端的 /payment/mock/pay/{orderId}
+                        // 必须落到下面的 authenticated()，否则任何人都能确认别人的订单。
+                        .requestMatchers("/payment/mock/confirm", "/payment/alipay/notify", "/payment/wechat/notify").permitAll()
                         // Swagger / API 文档
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/error").permitAll()
                         .anyRequest().authenticated()
