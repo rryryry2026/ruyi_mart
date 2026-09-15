@@ -10,6 +10,7 @@ import com.ruyi.ruyi_mart.properties.AliyunOSSProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
@@ -59,6 +60,14 @@ public class AliyunOSSUtils {
      * 非空 / 大小上限 / 类型白名单 / 文件头（magic bytes）。
      */
     public String upload(MultipartFile file, String dir) {
+        // 配置模板里 OSS 密钥是留空的（需用环境变量注入），这里先给出明确提示，
+        // 否则只会报一句笼统的"上传失败"，看不出是配置问题
+        if (!StringUtils.hasText(aliyunOSSProperties.getAccessKeyId())
+                || !StringUtils.hasText(aliyunOSSProperties.getAccessKeySecret())
+                || !StringUtils.hasText(aliyunOSSProperties.getBucketName())) {
+            throw new BusinessException(ResultCode.FAIL,
+                    "OSS 未配置：请设置环境变量 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET");
+        }
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ResultCode.FAIL, "上传文件不能为空");
         }
