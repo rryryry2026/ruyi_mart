@@ -7,6 +7,7 @@ import com.ruyi.ruyi_mart.module.order.dto.OrderCreateDTO;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import com.ruyi.ruyi_mart.module.order.vo.OrderVO;
 import com.ruyi.ruyi_mart.module.payment.vo.PaymentResult;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -24,7 +25,7 @@ public class OrderController {
     private OrderService orderService;
 
     @PostMapping("/create")
-    public Result<OrderVO> create(@RequestBody OrderCreateDTO dto){
+    public Result<OrderVO> create(@Valid @RequestBody OrderCreateDTO dto){
         return Result.success(orderService.createOrder(currentUserId(), dto));
     }
 

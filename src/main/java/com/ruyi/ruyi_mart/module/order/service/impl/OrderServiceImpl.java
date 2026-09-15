@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
+import com.ruyi.ruyi_mart.module.address.entity.Address;
+import com.ruyi.ruyi_mart.module.address.mapper.AddressMapper;
 import com.ruyi.ruyi_mart.module.cart.service.CartService;
 import com.ruyi.ruyi_mart.module.cart.vo.CartItemVO;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponUseDTO;
@@ -51,6 +53,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Autowired
     private OrderItemMapper orderItemMapper;
     @Autowired
+    private AddressMapper addressMapper;
+    @Autowired
     private PaymentStrategyHolder paymentStrategyHolder;
     @Autowired
     private StockService stockService;
@@ -69,6 +73,18 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException(ResultCode.NOT_FIND,"购物车为空，无法下单");
         }
 
+        /**收货地址：必填，且必须是本人的地址（否则可以指定别人的地址下单）*/
+        if(dto == null || dto.getAddressId() == null){
+            throw new BusinessException(ResultCode.FAIL,"请选择收货地址");
+        }
+        Address address = addressMapper.selectById(dto.getAddressId());
+        if(address == null){
+            throw new BusinessException(ResultCode.NOT_FIND,"收货地址不存在");
+        }
+        if(!address.getUserId().equals(userId)){
+            throw new BusinessException(ResultCode.FORBIDDEN,"收货地址不属于当前用户");
+        }
+
         List<CartItemVO> sortedItems = new ArrayList<>(cartItems);
         sortedItems.sort(Comparator.comparing(CartItemVO::getProductId));
         for(CartItemVO ci : sortedItems){
@@ -83,6 +99,13 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setUserId(userId);
         order.setStatus(0);
         order.setTotalAmount(BigDecimal.ZERO);
+        /**把地址内容复制进订单做快照，之后地址被改被删都不影响这一单*/
+        order.setReceiver(address.getReceiver());
+        order.setPhone(address.getPhone());
+        order.setProvince(address.getProvince());
+        order.setCity(address.getCity());
+        order.setDistrict(address.getDistrict());
+        order.setDetailAddress(address.getDetailAddress());
         order.setCreateTime(LocalDateTime.now());
         order.setUpdateTime(LocalDateTime.now());
         baseMapper.insert(order);
@@ -133,15 +156,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             log.error("发送关单延迟消息失败,订单{}将由定时任务兜底关闭", order.getId(), e);
         }
 
-        OrderVO vo = new OrderVO();
-        vo.setId(order.getId());
-        vo.setOrderNo(order.getOrderNo());
-        vo.setUserId(order.getUserId());
-        vo.setTotalAmount(order.getTotalAmount());
-        vo.setStatus(order.getStatus());
-        vo.setCreateTime(order.getCreateTime());
-        vo.setItems(itemList);
-        return vo;
+        // 统一走 toVO，避免这里手拼一遍字段（地址刚加进来时最容易漏）
+        return toVO(order);
     }
 
 
@@ -417,6 +433,13 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         vo.setTotalAmount(order.getTotalAmount());
         vo.setStatus(order.getStatus());
         vo.setCreateTime(order.getCreateTime());
+        // 收货地址快照
+        vo.setReceiver(order.getReceiver());
+        vo.setPhone(order.getPhone());
+        vo.setProvince(order.getProvince());
+        vo.setCity(order.getCity());
+        vo.setDistrict(order.getDistrict());
+        vo.setDetailAddress(order.getDetailAddress());
         QueryWrapper<OrderItem> qw = new QueryWrapper<>();
         qw.eq("order_id",order.getId());
         vo.setItems(orderItemMapper.selectList(qw));
