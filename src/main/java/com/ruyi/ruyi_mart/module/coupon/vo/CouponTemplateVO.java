@@ -7,12 +7,8 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * 领券中心的可领取券。
- *
- * 只返回"当前用户确实还能领"的券——服务端已经按领取上限、库存、互斥组先滤过一遍，
- * 避免前端展示出一个点下去必然失败的券。
- */
+
+//领券中心列表可领取的券 vo 给前端展示。
 @Data
 public class CouponTemplateVO {
 
@@ -33,14 +29,14 @@ public class CouponTemplateVO {
 
     private BigDecimal minSpend;
 
-    /** 有效期模式：fixedTime 固定时间 / receiveDays 领券后N天 */
+    /** 有效期模式：fixedTime 固定时间 / afterReceive 领券后N天 */
     private CouponValidModeEnum validMode;
 
     private LocalDateTime validStart;
 
     private LocalDateTime validEnd;
 
-    /** 领券后有效天数（validMode=receiveDays 时有意义） */
+    /** 领券后有效天数（validMode=afterReceive 时有意义） */
     private Integer receiveValidDays;
 
     /** 单人限领张数 */

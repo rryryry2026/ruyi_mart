@@ -6,10 +6,8 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 
-/**
- * 用户端核销优惠券入参（结算时使用）
- */
 
+//核销优惠券的入参。
 @Data
 public class CouponUseDTO {
 
@@ -24,6 +22,11 @@ public class CouponUseDTO {
     /**订单项ID（单品券核销用，全场券可空）*/
     private Long orderItemId;
 
-    /**订单金额（结算时传，用于计算折扣券的真实抵扣额；不传则按面值兜底）*/
+    /**
+     * 订单金额（必填）。
+     * 不能省：满减券的门槛校验依赖它，缺了会退化成"直接按面额抵扣"，
+     * 等于"满 800 减 100"的券可以无门槛使用。
+     */
+    @NotNull(message = "订单金额不能为空")
     private BigDecimal orderAmount;
 }

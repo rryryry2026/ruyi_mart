@@ -11,6 +11,7 @@ import com.ruyi.ruyi_mart.module.coupon.vo.CouponUserVO;
 import java.math.BigDecimal;
 import java.util.List;
 
+//用户端优惠券业务接口，声明方法。
 public interface CouponUserService extends IService<CouponUser> {
 
     /**用户领券（userId 从登录态取，dto 只带 couponId）*/

@@ -11,6 +11,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+//coupon表的镜像。
 @Data
 @TableName("coupon")
 public class Coupon {

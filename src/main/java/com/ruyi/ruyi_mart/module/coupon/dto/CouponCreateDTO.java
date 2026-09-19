@@ -4,6 +4,7 @@ import com.ruyi.ruyi_mart.module.coupon.enums.CouponTypeEnum;
 import com.ruyi.ruyi_mart.module.coupon.enums.CouponValidModeEnum;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -11,14 +12,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 
-/**
- * 管理端创建优惠券入参
- */
-
+//创建优惠券的入参。
 @Data
 public class CouponCreateDTO {
 
-    /**活动名称*/
+    /**活动名称（券的主要展示文案，必填）*/
+    @NotBlank(message = "活动名称不能为空")
     private String activityName;
 
     /**券类型（枚举：满减/折扣/无门槛/单品）*/

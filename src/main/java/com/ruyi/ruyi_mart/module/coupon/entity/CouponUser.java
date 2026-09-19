@@ -9,6 +9,8 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+//coupon_user表的镜像。
+//用户领到的券。
 @Data
 @TableName("coupon_user")
 public class CouponUser {

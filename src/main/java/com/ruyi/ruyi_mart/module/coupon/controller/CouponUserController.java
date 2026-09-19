@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.List;
 
+//优惠券的用户端接口
 @RestController
 @RequestMapping("/coupon")
 
@@ -64,8 +65,8 @@ public class CouponUserController {
 
     /**结算用券（核销，返回本次抵扣金额）*/
     @PostMapping("/use")
-    public Result<java.math.BigDecimal> use(@Valid @RequestBody CouponUseDTO dto) {
-        java.math.BigDecimal discount = couponUserService.useCoupon(currentUserId(), dto);
+    public Result<BigDecimal> use(@Valid @RequestBody CouponUseDTO dto) {
+        BigDecimal discount = couponUserService.useCoupon(currentUserId(), dto);
         return Result.success(discount);
     }
 }

@@ -7,14 +7,9 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * 用户券（券包 / 结算可用券）。
- *
- * 之前接口直接返回 CouponUser 实体，只有券ID、有效期、状态，
- * 前端拿不到面额和门槛，显示不出"满100减20"。
- * 这里把券模板的展示字段一并带上。
- * 类型与状态沿用枚举的 @JsonValue，序列化成英文标识（unused / fullReduction 等）。
- */
+
+//我的券包 vo 前端展示。
+//跨表拼接 把 coupon_user + coupon 的字段合成一个。
 @Data
 public class CouponUserVO {
 

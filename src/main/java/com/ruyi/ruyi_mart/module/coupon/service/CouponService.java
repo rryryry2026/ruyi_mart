@@ -6,6 +6,7 @@ import com.ruyi.ruyi_mart.module.coupon.dto.CouponCreateDTO;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponQueryDTO;
 import com.ruyi.ruyi_mart.module.coupon.entity.Coupon;
 
+//管理端优惠券业务接口，声明方法。
 public interface CouponService extends IService<Coupon> {
 
     /**管理端分页列表*/
