@@ -39,6 +39,15 @@ public interface OrderService extends IService<Order> {
     /**取消订单*/
     OrderVO cancelOrder(Long userId, Long orderId);
 
+    /**
+     * 关闭待支付订单并回补库存（定时任务 / 延迟消息 / 取消，三个入口共用）。
+     *
+     * 关单和回补库存必须成对：只有"抢到状态流转"的那一次调用才允许回补，
+     * 否则同一笔订单会被回补多遍（库存虚增）。返回 false 表示订单
+     * 已不是待支付（被别人关掉/取消/支付了），本次什么都没做。
+     */
+    boolean closePendingOrder(Long orderId);
+
     /**按状态筛选订单*/
     List<OrderVO> listOrdersByStatus(Long userId, Integer status);
 

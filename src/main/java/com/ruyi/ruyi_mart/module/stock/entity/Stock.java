@@ -7,28 +7,28 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+//商品库存 stock 表的镜像。一个商品一条记录。
 @Data
 @TableName("stock")
 public class Stock {
 
-    /** 主键即商品ID（一个商品一条库存记录） */
-    @TableId(type = IdType.AUTO)
+    /**
+     * 主键即商品ID（一个商品一条库存记录）。
+     * 用 INPUT 而不是 AUTO：这个值是按商品ID传进来的，不是数据库自增。
+     * 标成 AUTO 会让 MyBatis-Plus 以为"插入后要回填自增主键"，
+     * 语义对不上（也埋着"哪天不传 productId 插入、数据库自己编一个id"的坑）。
+     */
+    @TableId(type = IdType.INPUT)
     private Long productId;
 
+    /**库存总量*/
     private Integer total;
 
+    /**可用库存*/
     private Integer available;
 
+    /**已被未支付订单预扣的数量*/
     private Integer locked;
-
-    /**
-     * 版本号，仅作为并发修改的痕迹字段（每次库存变更 +1）。
-     * 刻意不加 @Version：本项目的库存并发控制统一由 StockMapper 中的手写原子 SQL 承担
-     * （靠数据库行锁 + WHERE 条件做 CAS，如 preDeduct 的 available >= n），
-     * 而非 MyBatis-Plus 乐观锁插件。加 @Version 会让 updateById 需要
-     * OptimisticLockerInnerInterceptor 提供参数，未注册时会直接抛 BindingException。
-     */
-    private Integer version;
 
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

@@ -262,20 +262,50 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException(ResultCode.FAIL,"只有待支付订单才能取消");
         }
 
+        /**
+         * 上面那句状态判断只是为了给出准确提示，真正管用的是这句条件更新。
+         * 用户点"取消"的那一瞬间，定时任务可能正好在扫同一笔超时单、
+         * 支付回调也可能同时到达 —— 两边都读到"待支付"就会都去回补库存，
+         * 可用库存凭空多出一份（虚增 → 超卖）。
+         * 抢不到这一行就说明别人已经处理了，直接报错，绝不再碰库存。
+         */
+        if(baseMapper.changeStatusIf(orderId, OrderStatus.PENDING.getCode(),
+                OrderStatus.CANCELLED.getCode()) == 0){
+            throw new BusinessException(ResultCode.FAIL,"订单状态已变更，请刷新后重试");
+        }
+        releaseStock(orderId);
+
+        return getOrderDetail(userId,orderId);
+    }
+
+    /**
+     * 关闭待支付订单并回补库存。
+     * 定时任务、延迟消息两个入口都走这里，保证"关单"和"回补库存"永远成对发生。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean closePendingOrder(Long orderId){
+        if(baseMapper.changeStatusIf(orderId, OrderStatus.PENDING.getCode(),
+                OrderStatus.CLOSED.getCode()) == 0){
+            log.info("订单 {} 已不是待支付状态，跳过关闭与库存回补", orderId);
+            return false;
+        }
+        releaseStock(orderId);
+        log.info("订单 {} 已关闭，回补锁定库存", orderId);
+        return true;
+    }
+
+    /**
+     * 回补一笔订单占用的库存。
+     * 只允许在"抢到状态流转"之后调用 —— 单独调它等于重复回补。
+     */
+    private void releaseStock(Long orderId){
         QueryWrapper<OrderItem> qw = new QueryWrapper<>();
         qw.eq("order_id",orderId);
         List<OrderItem> items = orderItemMapper.selectList(qw);
         for(OrderItem item:items){
             stockService.release(item.getProductId(), item.getQuantity());
         }
-
-        Order upd = new Order();
-        upd.setId(orderId);
-        upd.setStatus(OrderStatus.CANCELLED.getCode());
-        upd.setUpdateTime(LocalDateTime.now());
-        baseMapper.updateById(upd);
-
-        return getOrderDetail(userId,orderId);
     }
 
     // ============ 发货  ============
