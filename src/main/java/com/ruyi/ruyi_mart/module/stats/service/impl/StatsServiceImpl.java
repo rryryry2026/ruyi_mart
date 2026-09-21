@@ -1,26 +1,28 @@
 package com.ruyi.ruyi_mart.module.stats.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
 import com.ruyi.ruyi_mart.module.refund.entity.Refund;
 import com.ruyi.ruyi_mart.module.refund.enums.RefundStatus;
 import com.ruyi.ruyi_mart.module.refund.mapper.RefundMapper;
+import com.ruyi.ruyi_mart.module.stats.mapper.StatsMapper;
+import com.ruyi.ruyi_mart.module.stats.service.StatsService;
+import com.ruyi.ruyi_mart.module.stats.vo.OrderStatusCountVO;
+import com.ruyi.ruyi_mart.module.stats.vo.StatsSummaryVO;
 import com.ruyi.ruyi_mart.module.stock.entity.Stock;
 import com.ruyi.ruyi_mart.module.stock.mapper.StockMapper;
-import com.ruyi.ruyi_mart.module.stats.service.StatsService;
-import com.ruyi.ruyi_mart.module.stats.vo.StatsSummaryVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.Arrays;
-import java.util.List;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+//返回工作台六个指标。
 @Service
 public class StatsServiceImpl implements StatsService {
 
@@ -33,40 +35,47 @@ public class StatsServiceImpl implements StatsService {
     private RefundMapper refundMapper;
     @Autowired
     private StockMapper stockMapper;
+    @Autowired
+    private StatsMapper statsMapper;
 
+    /**
+     * 工作台六个指标。
+     *
+     * 只统计数用 count、要汇总的交给 StatsMapper 聚合，不要把订单行捞回内存再算。
+     * 加只读事务是为了让这一串查询落在同一个一致性快照上：
+     * 否则六条语句各自一个快照，并发下可能出现"订单数已经变了、销售额还是旧的"这种自相矛盾的返回。
+     */
     @Override
+    @Transactional(readOnly = true)
     public StatsSummaryVO summary() {
         StatsSummaryVO vo = new StatsSummaryVO();
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
 
-        // 今日订单（含未支付）与销售额：一次性取今日订单，内存里分别统计
-        List<Order> todayOrders = orderMapper.selectList(
-                new QueryWrapper<Order>().ge("create_time", LocalDate.now().atStartOfDay()));
-        vo.setTodayOrderCount((long) todayOrders.size());
-        List<Integer> paidStatuses = Arrays.asList(
-                OrderStatus.PAID.getCode(),
-                OrderStatus.SHIPPED.getCode(),
-                OrderStatus.COMPLETED.getCode());
-        vo.setTodaySalesAmount(todayOrders.stream()
-                .filter(o -> o.getTotalAmount() != null && paidStatuses.contains(o.getStatus()))
-                .map(Order::getTotalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        //今日订单数（含未支付）
+        vo.setTodayOrderCount(orderMapper.selectCount(new LambdaQueryWrapper<Order>()
+                .ge(Order::getCreateTime, todayStart)));
 
-        vo.setPendingShipCount(orderMapper.selectCount(
-                new QueryWrapper<Order>().eq("status", OrderStatus.PAID.getCode())));
+        //今日销售额：已支付/已发货/已完成计入，数据库里聚合完只回一个数
+        vo.setTodaySalesAmount(statsMapper.sumSalesAmountSince(todayStart));
 
-        vo.setPendingRefundCount(refundMapper.selectCount(
-                new QueryWrapper<Refund>().eq("status", RefundStatus.PENDING.getCode())));
+        //待发货数
+        vo.setPendingShipCount(orderMapper.selectCount(new LambdaQueryWrapper<Order>()
+                .eq(Order::getStatus, OrderStatus.PAID.getCode())));
 
-        vo.setLowStockCount(stockMapper.selectCount(
-                new QueryWrapper<Stock>().le("available", LOW_STOCK_THRESHOLD)));
+        //待退款审核数
+        vo.setPendingRefundCount(refundMapper.selectCount(new LambdaQueryWrapper<Refund>()
+                .eq(Refund::getStatus, RefundStatus.PENDING.getCode())));
 
-        // 各状态订单数分布（只查 status 列）
-        List<Order> statusOnly = orderMapper.selectList(
-                new QueryWrapper<Order>().select("status"));
-        Map<Integer, Long> counts = statusOnly.stream()
-                .filter(o -> o.getStatus() != null)
-                .collect(Collectors.groupingBy(Order::getStatus, Collectors.counting()));
+        //低库存商品数（只统计已初始化库存的商品，没建库存记录的不算"低库存"）
+        vo.setLowStockCount(stockMapper.selectCount(new LambdaQueryWrapper<Stock>()
+                .le(Stock::getAvailable, LOW_STOCK_THRESHOLD)));
+
+        //各状态订单数分布：数据库 GROUP BY，回几行就是几个状态
+        Map<Integer, Long> counts = statsMapper.countOrdersByStatus().stream()
+                .filter(c -> c.getStatus() != null)
+                .collect(Collectors.toMap(OrderStatusCountVO::getStatus, OrderStatusCountVO::getOrderCount));
         vo.setOrderStatusCounts(counts);
+
         return vo;
     }
 }
