@@ -10,9 +10,6 @@ public class ProductAppendCommentVO {
     /** 追评 id */
     private Long id;
 
-    /** 追评用户 id */
-    private Long userId;
-
     /** 追评内容 */
     private String content;
 

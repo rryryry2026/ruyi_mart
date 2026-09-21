@@ -1,4 +1,4 @@
-package com.ruyi.ruyi_mart.module.user.service.impl;
+package com.ruyi.ruyi_mart.module.user.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruyi.ruyi_mart.common.config.JwtProperties;
@@ -9,7 +9,6 @@ import com.ruyi.ruyi_mart.module.user.dto.LoginRequest;
 import com.ruyi.ruyi_mart.module.user.dto.LoginResponse;
 import com.ruyi.ruyi_mart.module.user.entity.User;
 import com.ruyi.ruyi_mart.module.user.mapper.UserMapper;
-import com.ruyi.ruyi_mart.module.user.service.RefreshTokenStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,7 +17,7 @@ import org.springframework.stereotype.Service;
 /**用户登录服务。*/
 @Slf4j
 @Service
-public class LoginServiceImpl {
+public class LoginService {
 
     @Autowired
     private UserMapper userMapper;//查用户表

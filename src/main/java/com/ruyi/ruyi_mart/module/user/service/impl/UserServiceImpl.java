@@ -12,6 +12,7 @@ import com.ruyi.ruyi_mart.module.user.mapper.UserMapper;
 import com.ruyi.ruyi_mart.module.user.service.RefreshTokenStore;
 import com.ruyi.ruyi_mart.module.user.service.UserService;
 import com.ruyi.ruyi_mart.module.user.vo.UserAdminVO;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -117,21 +118,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             query.eq(User::getStatus, dto.getStatus());
         }
         query.orderByDesc(User::getCreateTime);
-        this.page(page, query);
+        //链式包装器要用它自己的 page()：当参数传给 this.page(...) 会报
+        //"can not use this method for getSqlFirst"（链式包装器不支持那几个方法）
+        query.page(page);
 
         Page<UserAdminVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
         List<UserAdminVO> vos = new ArrayList<>();
         for(User u : page.getRecords()){
             UserAdminVO vo = new UserAdminVO();
-            // 逐个字段手工搬运，杜绝把 password 带出去
-            vo.setId(u.getId());
-            vo.setUsername(u.getUsername());
-            vo.setNickname(u.getNickname());
-            vo.setPhone(u.getPhone());
-            vo.setUserType(u.getUserType());
-            vo.setStatus(u.getStatus());
-            vo.setCreateTime(u.getCreateTime());
-            vo.setUpdateTime(u.getUpdateTime());
+            //按属性名搬：VO 的字段清单就是脱敏白名单，
+            //实体里的 password / deleted 因为 VO 没有对应字段，搬不出去
+            BeanUtils.copyProperties(u, vo);
             vos.add(vo);
         }
         voPage.setRecords(vos);

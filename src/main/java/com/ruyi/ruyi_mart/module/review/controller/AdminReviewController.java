@@ -2,6 +2,7 @@ package com.ruyi.ruyi_mart.module.review.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.common.result.Result;
+import com.ruyi.ruyi_mart.module.log.annotation.OpLog;
 import com.ruyi.ruyi_mart.module.review.dto.AdminReplyDTO;
 import com.ruyi.ruyi_mart.module.review.dto.ReviewAdminQueryDTO;
 import com.ruyi.ruyi_mart.module.review.service.ProductCommentService;
@@ -48,6 +49,7 @@ public class AdminReviewController {
 
     /**显示/隐藏评论（隐藏后消费端不可见）*/
     @PutMapping("/{id}/status")
+    @OpLog(module = "评价管理", action = "显示/隐藏评价")
     public Result<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
         productCommentService.updateCommentStatus(id, status);
         return Result.success();
@@ -55,6 +57,7 @@ public class AdminReviewController {
 
     /**删除评论（一级评论会连带删除其二级回复、追评与点赞记录）*/
     @DeleteMapping("/{id}")
+    @OpLog(module = "评价管理", action = "删除评价")
     public Result<Void> delete(@PathVariable Long id) {
         productCommentService.deleteComment(id);
         return Result.success();
@@ -62,6 +65,7 @@ public class AdminReviewController {
 
     /**商家回复（以当前管理员身份回复，昵称取数据库真实值）*/
     @PostMapping("/reply")
+    @OpLog(module = "评价管理", action = "商家回复")
     public Result<Long> reply(@Valid @RequestBody AdminReplyDTO dto) {
         return Result.success(productCommentService.adminReply(currentUserId(), dto));
     }

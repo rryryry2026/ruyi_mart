@@ -23,7 +23,8 @@ public class SecondProductCommentDTO {
     @Size(max = 500, message = "评论内容长度不能超过500个字符")
     private String content;
 
-    /**回复图片URL集合（JSON数组格式文本），非必填*/
+    /**回复图片URL集合（JSON数组格式文本），非必填。库列是 varchar(2000)，超长会被数据库拒绝*/
+    @Size(max = 2000, message = "图片信息过长")
     private String imageUrls;
 
     /**是否匿名评论（0=否，1=是），默认否*/

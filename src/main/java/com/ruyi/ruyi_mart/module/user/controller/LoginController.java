@@ -4,7 +4,7 @@ import com.ruyi.ruyi_mart.common.result.Result;
 import com.ruyi.ruyi_mart.module.user.dto.LoginRequest;
 import com.ruyi.ruyi_mart.module.user.dto.LoginResponse;
 import com.ruyi.ruyi_mart.module.user.dto.RefreshRequest;
-import com.ruyi.ruyi_mart.module.user.service.impl.LoginServiceImpl;
+import com.ruyi.ruyi_mart.module.user.service.LoginService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
@@ -19,19 +19,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class LoginController {
 
     @Autowired
-    private LoginServiceImpl loginServiceImpl;
+    private LoginService loginService;
 
     /**用户登录*/
     @PostMapping("/login")
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest req){
-        LoginResponse resp = loginServiceImpl.login(req);
+        LoginResponse resp = loginService.login(req);
         return Result.success(resp);
     }
 
     /**用户重续令牌*/
     @PostMapping("/refresh")
     public Result<LoginResponse> refresh(@RequestBody RefreshRequest req){
-        LoginResponse resp = loginServiceImpl.refresh(req.getRefreshToken());
+        LoginResponse resp = loginService.refresh(req.getRefreshToken());
         return Result.success(resp);
     }
 
@@ -40,7 +40,7 @@ public class LoginController {
     public Result<Void> logout(){
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Long userId = (Long) authentication.getPrincipal();
-        loginServiceImpl.logout(userId);
+        loginService.logout(userId);
         return Result.success();
     }
 

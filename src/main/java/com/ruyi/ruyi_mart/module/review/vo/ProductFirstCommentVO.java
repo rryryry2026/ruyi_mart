@@ -19,9 +19,6 @@ public class ProductFirstCommentVO {
     /** 商品规格简介文本（如 "颜色:黑 容量:256G"） */
     private String productSpecText;
 
-    /** 评论用户 id */
-    private Long userId;
-
     /** 用户昵称（冗余存储，展示用，不 join 用户表） */
     private String userNickname;
 

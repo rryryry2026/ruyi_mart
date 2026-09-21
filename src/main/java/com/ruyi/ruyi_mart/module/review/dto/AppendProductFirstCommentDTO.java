@@ -5,6 +5,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * 发表追评的入参。
+ */
 @Data
 public class AppendProductFirstCommentDTO {
 
@@ -19,7 +22,8 @@ public class AppendProductFirstCommentDTO {
     private String content;
 
     /**
-     * 追评图片URL集合（JSON数组格式文本），非必填
+     * 追评图片URL集合（JSON数组格式文本），非必填。库列是 varchar(2000)，超长会被数据库拒绝
      */
+    @Size(max = 2000, message = "图片信息过长")
     private String imageUrls;
 }

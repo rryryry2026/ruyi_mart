@@ -32,7 +32,8 @@ public class FirstProductCommentDTO {
     @Size(max = 1000, message = "评论内容不能超过1000字")
     private String content;
 
-    /**评论图片URL集合（JSON数组格式文本），非必填*/
+    /**评论图片URL集合（JSON数组格式文本），非必填。库列是 varchar(2000)，超长会被数据库拒绝*/
+    @Size(max = 2000, message = "图片信息过长")
     private String imageUrls;
 
     @NotNull(message = "评分不能为空")

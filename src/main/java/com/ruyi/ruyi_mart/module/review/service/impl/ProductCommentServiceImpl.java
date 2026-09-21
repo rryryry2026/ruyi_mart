@@ -3,6 +3,9 @@ package com.ruyi.ruyi_mart.module.review.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
@@ -30,6 +33,7 @@ import com.ruyi.ruyi_mart.module.review.vo.ProductSecondCommentVO;
 import com.ruyi.ruyi_mart.module.review.vo.ReviewAdminVO;
 import com.ruyi.ruyi_mart.module.user.entity.User;
 import com.ruyi.ruyi_mart.module.user.mapper.UserMapper;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -59,6 +63,10 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
     private static final String ANONYMOUS_NICKNAME = "匿名用户";
     /**好评门槛：评分 >= 该值算好评*/
     private static final int GOOD_REVIEW_MIN_RATING = 4;
+    /**用户类型：1=系统管理员。本项目里管理员即商家，其回复标"商家"*/
+    private static final int USER_TYPE_ADMIN = 1;
+    /**一条评论最多带几张图*/
+    private static final int MAX_COMMENT_IMAGES = 9;
 
     @Autowired
     private ProductCommentAppendMapper appendMapper;
@@ -72,6 +80,8 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
     private OrderMapper orderMapper;
     @Autowired
     private OrderItemMapper orderItemMapper;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     // ==================== 1. 发表一级评论（首评） ====================
 
@@ -90,34 +100,33 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
         }
 
         ProductComment comment = new ProductComment();
-        comment.setProductId(dto.getProductId());
-        comment.setProductSpecId(dto.getProductSpecId());
-        comment.setProductSpecText(dto.getProductSpecText());
-        comment.setOrderNo(dto.getOrderNo());
+        //能直接对应的字段一次搬完（商品、规格、订单号、内容、评分、是否匿名）
+        BeanUtils.copyProperties(dto, comment);
+        //图片要先校验再落库：copyProperties 搬的是原值，这里覆盖成校验后的
+        comment.setImageUrls(validateImageUrls(dto.getImageUrls()));
+        //以下是服务端说了算的字段，一律显式写，不给前端覆盖的机会
         comment.setUserId(userId);
         fillAuthor(comment, userId);
-        comment.setParentId(0L);
-        //能走到这里说明订单校验已经过了，这个标记才是真的
-        comment.setIsBuyer(1);
-        comment.setIsAppendComment(0);
-        comment.setIsAnonymous(dto.getIsAnonymous());
-        comment.setRating(dto.getRating());
+        comment.setParentId(0L);            //一级评论
+        comment.setIsBuyer(1);              //能走到这里说明订单校验已经过了，这个标记才是真的
         comment.setIsGoodReview(dto.getRating() >= GOOD_REVIEW_MIN_RATING ? 1 : 0);
-        comment.setContent(dto.getContent());
-        comment.setImageUrls(dto.getImageUrls());
-        comment.setLikeCount(0);
-        comment.setStatus(STATUS_VISIBLE);
+        applyNewCommentDefaults(comment);
         applyAnonymous(comment, dto.getIsAnonymous());
-        comment.setCreateTime(LocalDateTime.now());
-        comment.setUpdateTime(LocalDateTime.now());
 
         try{
             if(!this.save(comment)){
                 throw new BusinessException(ResultCode.ERROR, "评论保存失败，请稍后再试");
             }
         }catch (DuplicateKeyException e){
-            //表上有 uk_order_product(order_no, product_id, parent_id)：连点两下时两个请求
-            //可能都通过了上面的查重，后插的那条会撞唯一键，这里翻译成一句人话
+            /**
+             * 表上有 uk_order_product(order_no, product_id, parent_id)：连点两下时两个请求
+             * 可能都通过了上面的查重，后插的那条会撞唯一键，这里翻译成一句人话。
+             *
+             * 这里能安全 catch 的前提是：本方法【没有 @Transactional】。
+             * 一旦将来给它加上事务，唯一键异常会先把事务标记成 rollback-only，
+             * catch 住也没用，提交时照样抛 UnexpectedRollbackException（偶发 500）。
+             * 到那时要么把事务去掉，要么改成"先抢占再插入"的条件更新。
+             */
             throw new BusinessException(ResultCode.FAIL, "该订单的这个商品已经评价过了");
         }
         return comment.getId();
@@ -129,32 +138,21 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
     public Long saveProductSecondComment(Long userId, SecondProductCommentDTO dto){
         ProductComment parent = this.getById(dto.getParentId());
         if(parent == null){
-            throw new BusinessException(ResultCode.FAIL, "被回复的评论不存在，无法回复");
+            throw new BusinessException(ResultCode.NOT_FIND, "被回复的评论不存在，无法回复");
+        }
+        /**
+         * 被隐藏的评论不能再被回复。
+         * 否则会源源不断地造出"父评论看不见、回复却看得见"的孤儿内容 ——
+         * 读侧看到的是旧内容，写侧却能持续产生新内容，后者更难收拾。
+         */
+        if(!isVisible(parent)){
+            throw new BusinessException(ResultCode.FAIL, "该评论不可回复");
         }
 
-        ProductComment reply = new ProductComment();
-        //商品以被回复的那条评论为准，不用前端传的，避免挂到别的商品上
-        reply.setProductId(parent.getProductId());
-        reply.setParentId(parent.getId());
-        reply.setUserId(userId);
-        fillAuthor(reply, userId);
-        // 被回复人直接取父评论里存好的那份。
-        // 父评论如果是匿名的，它存的昵称本来就是"匿名用户"，这里也就不会把真实身份带出来。
-        reply.setReplyUserId(parent.getUserId());
-        reply.setReplyUserNickname(parent.getUserNickname());
-        reply.setIsAnonymous(dto.getIsAnonymous());
-        reply.setRating(0);                  //二级回复无评分
-        reply.setIsBuyer(parent.getUserId().equals(userId) ? 1 : 0);  //本人补充说明才算买家
-        reply.setIsAppendComment(0);
-        reply.setIsGoodReview(0);
-        reply.setContent(dto.getContent());
-        reply.setImageUrls(dto.getImageUrls());
-        reply.setLikeCount(0);
-        reply.setStatus(STATUS_VISIBLE);
-        applyAnonymous(reply, dto.getIsAnonymous());
-        reply.setCreateTime(LocalDateTime.now());
-        reply.setUpdateTime(LocalDateTime.now());
-
+        //本人补充说明才算买家
+        Integer isBuyer = parent.getUserId().equals(userId) ? 1 : 0;
+        ProductComment reply = buildSecondComment(parent, userId, isBuyer,
+                dto.getIsAnonymous(), dto.getContent(), dto.getImageUrls());
         if(!this.save(reply)){
             throw new BusinessException(ResultCode.ERROR, "回复保存失败，请稍后再试");
         }
@@ -204,7 +202,20 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
         if(firstComment == null){
             throw new BusinessException(ResultCode.FAIL, "未找到可追评的评论（请确认该订单已发表首评）");
         }
-        if(firstComment.getIsAppendComment() != null && firstComment.getIsAppendComment() == 1){
+
+        /**
+         * 先抢"未追评 → 已追评"这个状态流转，抢到才插追评。
+         * 原来是"查一下 isAppendComment、最后随手 updateById"：
+         * 连点两下时两个请求都会通过检查，后插的那条会撞 product_comment_append 的
+         * uk_comment 唯一键抛 500；而且整行写回还会把并发点赞改过的 like_count 覆盖回去。
+         */
+        boolean claimed = this.lambdaUpdate()
+                .eq(ProductComment::getId, firstComment.getId())
+                .eq(ProductComment::getIsAppendComment, 0)
+                .set(ProductComment::getIsAppendComment, 1)
+                .set(ProductComment::getUpdateTime, LocalDateTime.now())
+                .update();
+        if(!claimed){
             throw new BusinessException(ResultCode.FAIL, "该评论已追评，不可重复追评");
         }
 
@@ -215,20 +226,28 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
         append.setOrderNo(firstComment.getOrderNo());
         append.setUserId(userId);
         append.setContent(dto.getContent());
-        append.setImageUrls(dto.getImageUrls());
+        append.setImageUrls(validateImageUrls(dto.getImageUrls()));
         append.setStatus(STATUS_VISIBLE);
         append.setCreateTime(LocalDateTime.now());
         appendMapper.insert(append);
-
-        firstComment.setIsAppendComment(1);
-        firstComment.setUpdateTime(LocalDateTime.now());
-        this.updateById(firstComment);
     }
 
     // ==================== 5. 查询某一级评论下的二级回复（分页） ====================
 
     @Override
     public Page<ProductSecondCommentVO> getSecondCommentPage(Long userId, Long firstCommentId, int pageNum, int pageSize){
+        /**
+         * 父评论不存在、或已被管理端隐藏时，它下面的回复一律不返回。
+         * 回复列表是按 parentId 直查的，不校验父评论状态的话，
+         * 拿着 firstCommentId 就能绕开隐藏把内容读出来。
+         */
+        ProductComment parent = this.getById(firstCommentId);
+        if(parent == null || !isVisible(parent)){
+            Page<ProductSecondCommentVO> empty = new Page<>(pageNum, pageSize, 0);
+            empty.setRecords(new ArrayList<>());
+            return empty;
+        }
+
         Page<ProductComment> entityPage = this.lambdaQuery()
                 .eq(ProductComment::getParentId, firstCommentId)
                 //被隐藏的回复同样不展示
@@ -239,12 +258,19 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
 
         fillLike(entityPage.getRecords(), userId);
 
-        //父评论若是匿名的，回复里"回复 @某人"那个 userId 也不能带出去
-        ProductComment parent = this.getById(firstCommentId);
-        boolean maskReplyTarget = parent != null && isAnonymous(parent);
+        //批量判断作者是不是管理员（商家回复）：一条 IN 查询，避免逐条查库
+        Set<Long> authorIds = entityPage.getRecords().stream()
+                .map(ProductComment::getUserId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        Set<Long> sellerIds = authorIds.isEmpty() ? Collections.emptySet()
+                : userMapper.selectBatchIds(authorIds).stream()
+                        .filter(u -> u.getUserType() != null && u.getUserType() == USER_TYPE_ADMIN)
+                        .map(User::getId)
+                        .collect(Collectors.toSet());
 
         List<ProductSecondCommentVO> voList = entityPage.getRecords().stream()
-                .map(c -> toSecondCommentVO(c, maskReplyTarget))
+                .map(c -> toSecondCommentVO(c, sellerIds.contains(c.getUserId())))
                 .collect(Collectors.toList());
 
         Page<ProductSecondCommentVO> voPage = new Page<>(pageNum, pageSize, entityPage.getTotal());
@@ -256,19 +282,23 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
 
     @Override
     public ProductAppendCommentVO getAppendComment(Long firstCommentId){
+        /**
+         * 追评挂在首评下：首评不存在或被隐藏时，追评也不返回。
+         * 否则同样能靠 firstCommentId 直读绕开隐藏。
+         */
+        ProductComment firstComment = this.getById(firstCommentId);
+        if(firstComment == null || !isVisible(firstComment)){
+            return null;
+        }
+
         ProductCommentAppend append = appendMapper.selectOne(
                 new LambdaQueryWrapper<ProductCommentAppend>()
                         .eq(ProductCommentAppend::getCommentId, firstCommentId));
         if(append == null){
             return null;
         }
-        ProductAppendCommentVO vo = toAppendCommentVO(append);
-        //追评人和首评是同一个人：首评匿名时，追评里同样不能带出 userId
-        ProductComment firstComment = this.getById(firstCommentId);
-        if(firstComment != null && isAnonymous(firstComment)){
-            vo.setUserId(null);
-        }
-        return vo;
+        //追评人和首评是同一个人，昵称在写入时已经按匿名规则处理过（匿名的那份就是"匿名用户"）
+        return toAppendCommentVO(append);
     }
 
     // ==================== 7. 统计某商品评论总数（一级评论数） ====================
@@ -293,7 +323,11 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
         }
         ProductComment comment = this.getById(commentId);
         if(comment == null){
-            throw new BusinessException(ResultCode.FAIL, "评论不存在");
+            throw new BusinessException(ResultCode.NOT_FIND, "评论不存在");
+        }
+        //隐藏的含义是"对消费端不可见且不可再交互"，否则隐藏了也还能被点赞
+        if(!isVisible(comment)){
+            throw new BusinessException(ResultCode.FAIL, "该评论不可操作");
         }
 
         // 两步，都不在应用层算数：
@@ -324,9 +358,12 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
         if(dto.getReviewType() != null){
             query.eq(ProductComment::getIsGoodReview, dto.getReviewType());
         }
-        query.orderByDesc(ProductComment::getCreateTime).orderByDesc(ProductComment::getId);
-
-        Page<ProductComment> entityPage = this.page(new Page<>(dto.getPageNum(), dto.getPageSize()), query);
+        //链式包装器要用它自己的 page()：当参数传给 this.page(...) 会报
+        //"can not use this method for getSqlFirst"（链式包装器不支持那几个方法）
+        Page<ProductComment> entityPage = query
+                .orderByDesc(ProductComment::getCreateTime)
+                .orderByDesc(ProductComment::getId)
+                .page(new Page<>(dto.getPageNum(), dto.getPageSize()));
 
         Page<ReviewAdminVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
         List<ProductComment> records = entityPage.getRecords();
@@ -353,25 +390,8 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
 
         List<ReviewAdminVO> vos = new ArrayList<>();
         for(ProductComment c : records){
-            ReviewAdminVO vo = new ReviewAdminVO();
-            vo.setId(c.getId());
-            vo.setProductId(c.getProductId());
-            vo.setProductName(productNameMap.get(c.getProductId()));
-            vo.setUserId(c.getUserId());
-            vo.setUserNickname(c.getUserNickname());
-            vo.setUserAvatar(c.getUserAvatar());
-            vo.setIsAnonymous(c.getIsAnonymous());
-            vo.setIsBuyer(c.getIsBuyer());
-            vo.setIsGoodReview(c.getIsGoodReview());
-            vo.setIsAppendComment(c.getIsAppendComment());
-            vo.setRating(c.getRating());
-            vo.setContent(c.getContent());
-            vo.setImageUrls(c.getImageUrls());
-            vo.setLikeCount(c.getLikeCount());
-            vo.setReplyCount(replyCountMap.getOrDefault(c.getId(), 0L));
-            vo.setStatus(c.getStatus());
-            vo.setCreateTime(c.getCreateTime());
-            vos.add(vo);
+            vos.add(toReviewAdminVO(c, productNameMap.get(c.getProductId()),
+                    replyCountMap.getOrDefault(c.getId(), 0L)));
         }
         voPage.setRecords(vos);
         return voPage;
@@ -385,13 +405,20 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
         if(status == null || (status != 0 && status != 1)){
             throw new BusinessException(ResultCode.FAIL, "status 必须为 0 或 1");
         }
-        ProductComment comment = this.getById(commentId);
-        if(comment == null){
+        /**
+         * 只更新状态列，不回写整个实体。
+         * 实体是刚查出来的快照，里面的 like_count 可能已经被并发点赞改过，
+         * 整行写回会把别人的更新覆盖回去（点赞数短暂偏少）。
+         * 顺便用影响行数判断评论在不在，省掉一次查询。
+         */
+        boolean updated = this.lambdaUpdate()
+                .eq(ProductComment::getId, commentId)
+                .set(ProductComment::getStatus, status)
+                .set(ProductComment::getUpdateTime, LocalDateTime.now())
+                .update();
+        if(!updated){
             throw new BusinessException(ResultCode.NOT_FIND, "评论不存在");
         }
-        comment.setStatus(status);
-        comment.setUpdateTime(LocalDateTime.now());
-        this.updateById(comment);
     }
 
     // ==================== 11. 管理端：删除评论 ====================
@@ -434,25 +461,16 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
         if(parent.getParentId() != null && parent.getParentId() != 0L){
             throw new BusinessException(ResultCode.FAIL, "只能回复一级评论");
         }
+        /**
+         * 也不允许回复已隐藏的评论：回复本身是可见的，父评论却看不见，
+         * 用户会看到一条没有上下文的"商家回复"。要让回复生效，先把评论恢复显示。
+         */
+        if(!isVisible(parent)){
+            throw new BusinessException(ResultCode.FAIL, "该评论已隐藏，请先恢复显示再回复");
+        }
 
-        ProductComment reply = new ProductComment();
-        reply.setProductId(parent.getProductId());
-        reply.setParentId(parent.getId());
-        reply.setUserId(adminUserId);
-        fillAuthor(reply, adminUserId);
-        reply.setReplyUserId(parent.getUserId());
-        reply.setReplyUserNickname(parent.getUserNickname());
-        reply.setIsAnonymous(0);
-        reply.setIsBuyer(0);
-        reply.setIsAppendComment(0);
-        reply.setIsGoodReview(0);
-        reply.setRating(0);                  //二级回复无评分
-        reply.setContent(dto.getContent());
-        reply.setLikeCount(0);
-        reply.setStatus(STATUS_VISIBLE);
-        reply.setCreateTime(LocalDateTime.now());
-        reply.setUpdateTime(LocalDateTime.now());
-
+        //商家回复：不是买家、不匿名（这两项写死 0，由 buildSecondComment 统一处理）
+        ProductComment reply = buildSecondComment(parent, adminUserId, 0, 0, dto.getContent(), null);
         if(!this.save(reply)){
             throw new BusinessException(ResultCode.ERROR, "回复保存失败，请稍后再试");
         }
@@ -484,9 +502,77 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
         }
     }
 
-    /**是否匿名评论*/
-    private boolean isAnonymous(ProductComment comment){
-        return comment.getIsAnonymous() != null && comment.getIsAnonymous() == 1;
+    /**评论是否对消费端可见（管理端隐藏后即不可见、也不可再交互）*/
+    private boolean isVisible(ProductComment comment){
+        return comment.getStatus() != null && comment.getStatus() == STATUS_VISIBLE;
+    }
+
+    /**
+     * 校验评论图片字段。
+     * 库列是 varchar(2000)，长度先由 DTO 的 @Size 挡住；这里再确认它确实是一个
+     * JSON 数组、且条数不超过上限 —— 前端拿到后会 JSON.parse，塞进来一段非 JSON 文本
+     * 会让它直接抛错，属于"写坏数据"，所以在入口拦住。
+     *
+     * @param imageUrls JSON 数组文本，可为空
+     * @return 原样返回（校验通过），便于直接 set 进实体
+     */
+    private String validateImageUrls(String imageUrls){
+        if(!StringUtils.hasText(imageUrls)){
+            return imageUrls;
+        }
+        JsonNode node;
+        try{
+            node = objectMapper.readTree(imageUrls);
+        }catch (JsonProcessingException e){
+            throw new BusinessException(ResultCode.FAIL, "图片格式不正确");
+        }
+        if(!node.isArray()){
+            throw new BusinessException(ResultCode.FAIL, "图片格式不正确");
+        }
+        if(node.size() > MAX_COMMENT_IMAGES){
+            throw new BusinessException(ResultCode.FAIL, "最多上传 " + MAX_COMMENT_IMAGES + " 张图片");
+        }
+        for(JsonNode item : node){
+            if(!item.isTextual() || !StringUtils.hasText(item.asText())){
+                throw new BusinessException(ResultCode.FAIL, "图片格式不正确");
+            }
+        }
+        return imageUrls;
+    }
+
+    /**
+     * 组装一条二级回复。
+     * 用户回复和商家回复只差"评论人 / 是否买家 / 是否匿名"，其余规则完全一样，
+     * 放一处免得将来加字段（比如"是否商家回复"标记）时漏改其中一边。
+     * 商品、被回复人一律取自被回复的那条评论，不信前端传的。
+     */
+    private ProductComment buildSecondComment(ProductComment parent, Long authorId, Integer isBuyer,
+                                               Integer isAnonymous, String content, String imageUrls){
+        ProductComment reply = new ProductComment();
+        reply.setProductId(parent.getProductId());
+        reply.setParentId(parent.getId());
+        reply.setUserId(authorId);
+        fillAuthor(reply, authorId);
+        //父评论若匿名，它存的昵称本就是"匿名用户"，这里也不会把真实身份带出来
+        reply.setReplyUserId(parent.getUserId());
+        reply.setReplyUserNickname(parent.getUserNickname());
+        reply.setIsAnonymous(isAnonymous);
+        reply.setIsBuyer(isBuyer);
+        reply.setRating(0);                  //二级回复无评分
+        reply.setContent(content);
+        reply.setImageUrls(validateImageUrls(imageUrls));
+        applyNewCommentDefaults(reply);
+        applyAnonymous(reply, isAnonymous);
+        return reply;
+    }
+
+    /**新建评论/回复的公共初值：对消费端可见、还没追评、零点赞，并打上创建与更新时间*/
+    private void applyNewCommentDefaults(ProductComment comment){
+        comment.setIsAppendComment(0);
+        comment.setLikeCount(0);
+        comment.setStatus(STATUS_VISIBLE);
+        comment.setCreateTime(LocalDateTime.now());
+        comment.setUpdateTime(LocalDateTime.now());
     }
 
     /**
@@ -536,55 +622,34 @@ public class ProductCommentServiceImpl extends ServiceImpl<ProductCommentMapper,
 
     // ==================== 私有辅助：Entity -> VO 转换 ====================
 
-    private ProductFirstCommentVO toFirstCommentVO(ProductComment c){
-        ProductFirstCommentVO vo = new ProductFirstCommentVO();
-        vo.setId(c.getId());
-        vo.setProductId(c.getProductId());
-        vo.setProductSpecId(c.getProductSpecId());
-        vo.setProductSpecText(c.getProductSpecText());
-        //匿名的评论不返回 userId，否则顺着 ID 就能反查出是谁
-        vo.setUserId(isAnonymous(c) ? null : c.getUserId());
-        vo.setUserNickname(c.getUserNickname());
-        vo.setUserAvatar(c.getUserAvatar());
-        vo.setIsBuyer(c.getIsBuyer());
-        vo.setIsAppendComment(c.getIsAppendComment());
-        vo.setIsAnonymous(c.getIsAnonymous());
-        vo.setIsGoodReview(c.getIsGoodReview());
-        vo.setRating(c.getRating() == null ? 0 : c.getRating());
-        vo.setContent(c.getContent());
-        vo.setImageUrls(c.getImageUrls());
-        vo.setLikeCount(c.getLikeCount());
-        vo.setLike(c.isLike());
-        vo.setCreateTime(c.getCreateTime());
+    /**管理端列表用的 VO。商品名与回复数由调用方批量查好传进来，避免逐条查库*/
+    private ReviewAdminVO toReviewAdminVO(ProductComment c, String productName, Long replyCount){
+        ReviewAdminVO vo = new ReviewAdminVO();
+        //实体与 VO 同名字段一次搬完；VO 的字段清单就是"哪些字段能出去"的白名单
+        BeanUtils.copyProperties(c, vo);
+        //这两个是批量查好的关联数据，实体里没有
+        vo.setProductName(productName);
+        vo.setReplyCount(replyCount);
         return vo;
     }
 
-    private ProductSecondCommentVO toSecondCommentVO(ProductComment c, boolean maskReplyTarget){
+    private ProductFirstCommentVO toFirstCommentVO(ProductComment c){
+        ProductFirstCommentVO vo = new ProductFirstCommentVO();
+        BeanUtils.copyProperties(c, vo);   //含点赞态 like（VO 与实体同名，一并搬过去）
+        return vo;
+    }
+
+    private ProductSecondCommentVO toSecondCommentVO(ProductComment c, boolean isSeller){
         ProductSecondCommentVO vo = new ProductSecondCommentVO();
-        vo.setId(c.getId());
-        vo.setProductId(c.getProductId());
-        vo.setUserId(isAnonymous(c) ? null : c.getUserId());
-        vo.setUserNickname(c.getUserNickname());
-        vo.setUserAvatar(c.getUserAvatar());
-        vo.setIsBuyer(c.getIsBuyer());
-        vo.setIsAnonymous(c.getIsAnonymous());
-        vo.setContent(c.getContent());
-        vo.setImageUrls(c.getImageUrls());
-        vo.setLikeCount(c.getLikeCount());
-        vo.setLike(c.isLike());
-        vo.setReplyUserId(maskReplyTarget ? null : c.getReplyUserId());
-        vo.setReplyUserNickname(c.getReplyUserNickname());
-        vo.setCreateTime(c.getCreateTime());
+        BeanUtils.copyProperties(c, vo);
+        //作者是不是管理员：实体里没有这个字段，由调用方批量查好传进来
+        vo.setIsSeller(isSeller ? 1 : 0);
         return vo;
     }
 
     private ProductAppendCommentVO toAppendCommentVO(ProductCommentAppend a){
         ProductAppendCommentVO vo = new ProductAppendCommentVO();
-        vo.setId(a.getId());
-        vo.setUserId(a.getUserId());
-        vo.setContent(a.getContent());
-        vo.setImageUrls(a.getImageUrls());
-        vo.setCreateTime(a.getCreateTime());
+        BeanUtils.copyProperties(a, vo);
         return vo;
     }
 }
