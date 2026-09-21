@@ -52,7 +52,10 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     @Override
     public boolean updateById(Product entity){
         boolean r = super.updateById(entity);
-        redissonClient.getBucket(KEY_PREFIX + entity.getId()).delete();
+        // 必须带上 StringCodec：Redisson 是用 codec 把 key 编成 Redis 里的二进制 key 的，
+        // 读缓存时用了 StringCodec、删缓存时用默认 codec，编出来的根本不是同一个 key，
+        // 结果是"删了但没删掉"——改价/下架后详情页还会拿旧值，直到缓存自己过期。
+        redissonClient.getBucket(KEY_PREFIX + entity.getId(), StringCodec.INSTANCE).delete();
         return r;
     }
 
@@ -60,7 +63,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     @Override
     public boolean removeById(Serializable id){
         boolean r = super.removeById(id);
-        redissonClient.getBucket(KEY_PREFIX + id).delete();
+        redissonClient.getBucket(KEY_PREFIX + id, StringCodec.INSTANCE).delete();
         return r;
     }
 
