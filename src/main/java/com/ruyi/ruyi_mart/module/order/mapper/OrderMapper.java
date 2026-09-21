@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 @Mapper
@@ -25,4 +26,15 @@ public interface OrderMapper extends BaseMapper<Order> {
     int changeStatusIf(@Param("id") Long id,
                        @Param("from") Integer from,
                        @Param("to") Integer to);
+
+    /**
+     * 按主键加行锁取订单（退款申请时用）。
+     *
+     * 退款申请是"先查有没有进行中的退款单、再插入"，这个判断本身不是原子的：
+     * 同一笔订单并发点两次，两个事务都查到"没有进行中的退款"、各插一张，
+     * 之后两张都能审核通过 —— 库存回补两次。申请前先锁住订单行把它们串起来。
+     * 与 CouponMapper.selectByIdForUpdate 同一套做法。
+     */
+    @Select("SELECT * FROM order_info WHERE id = #{id} FOR UPDATE")
+    Order selectByIdForUpdate(@Param("id") Long id);
 }

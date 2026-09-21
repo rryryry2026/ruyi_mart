@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponReceiveDTO;
@@ -16,6 +17,7 @@ import com.ruyi.ruyi_mart.module.coupon.enums.CouponTypeEnum;
 import com.ruyi.ruyi_mart.module.coupon.enums.CouponUseStatusEnum;
 import com.ruyi.ruyi_mart.module.coupon.enums.CouponValidModeEnum;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponMapper;
+import com.ruyi.ruyi_mart.module.coupon.mapper.CouponMutexGroupMapper;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponOrderRelMapper;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponScopeDetailMapper;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponUserMapper;
@@ -37,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -60,6 +63,8 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     private CouponMapper couponMapper;
     @Autowired
     private CouponScopeDetailMapper couponScopeDetailMapper;
+    @Autowired
+    private CouponMutexGroupMapper couponMutexGroupMapper;
     @Autowired
     private CouponOrderRelMapper couponOrderRelMapper;
     @Autowired
@@ -87,7 +92,17 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             throw new BusinessException(ResultCode.FAIL, "优惠券不在发放中");
         }
 
-        long owned = count(Wrappers.<CouponUser>lambdaQuery()
+        /**
+         * 互斥是跨券的规则，只锁住本券这一行不够：
+         * 同一用户并发领两张互斥券时，两个事务各锁各的券行，
+         * 各自的互斥检查都看不到对方还没提交的那条领取记录，结果两张都领到了。
+         * 这里再把互斥组那一行也锁住，让同组的领券请求排队执行。
+         */
+        if(coupon.getMutexGroupCode() != null && coupon.getMutexGroupCode() != 0){
+            couponMutexGroupMapper.lockByGroupCode(coupon.getMutexGroupCode());
+        }
+
+        long owned = count(new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getUserId, userId)
                 .eq(CouponUser::getCouponId, coupon.getId()));
         int limit = coupon.getLimitPerPerson() == null ? 1 : coupon.getLimitPerPerson();
@@ -130,6 +145,26 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     }
 
     /**
+     * 我持有的券涉及哪些互斥组。
+     * 领券中心的列表循环要逐个模板判断互斥，而 isBlockedByMutex 每次都会全量查一遍我的券 ——
+     * 所以先把"我持有的互斥组"算一次，循环里只做集合判断。
+     */
+    private Set<Long> myMutexGroupCodes(List<CouponUser> mine){
+        Set<Long> codes = new HashSet<>();
+        if(mine.isEmpty()){
+            return codes;
+        }
+        Map<Long, Coupon> couponMap = loadCouponMap(mine);
+        for(CouponUser cu : mine){
+            Coupon held = couponMap.get(cu.getCouponId());
+            if(held != null && held.getMutexGroupCode() != null && held.getMutexGroupCode() != 0){
+                codes.add(held.getMutexGroupCode());
+            }
+        }
+        return codes;
+    }
+
+    /**
      * 是否被互斥组挡住。
      * 领券时的校验和领券中心的预筛都调它，避免同一套规则写两份、
      * 将来改了一处忘了另一处（就会出现"列表里显示能领、点下去报错"）。
@@ -139,7 +174,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         if (groupCode == null || groupCode == 0) {
             return false;
         }
-        List<CouponUser> mine = list(Wrappers.<CouponUser>lambdaQuery()
+        List<CouponUser> mine = list(new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getUserId, userId));
         if (mine.isEmpty()) {
             return false;
@@ -159,7 +194,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     @Override
     public IPage<CouponUserVO> myCoupons(Long userId, Integer useStatus, Integer page, Integer size) {
         Page<CouponUser> p = new Page<>(page == null ? 1 : page, size == null ? 10 : size);
-        IPage<CouponUser> entityPage = page(p, Wrappers.<CouponUser>lambdaQuery()
+        IPage<CouponUser> entityPage = page(p, new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getUserId, userId)
                 .eq(useStatus != null, CouponUser::getUseStatus, useStatus)
                 .orderByDesc(CouponUser::getCreateTime));
@@ -179,7 +214,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     @Override
     public List<CouponUserVO> listAvailable(Long userId, BigDecimal orderAmount) {
         LocalDateTime now = LocalDateTime.now();
-        List<CouponUser> mine = list(Wrappers.<CouponUser>lambdaQuery()
+        List<CouponUser> mine = list(new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getUserId, userId)
                 .eq(CouponUser::getUseStatus, CouponUseStatusEnum.UNUSED)
                 .le(CouponUser::getValidStart, now)
@@ -207,7 +242,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     @Override
     public List<CouponTemplateVO> listReceivable(Long userId) {
         // 发放中、且未被隐藏的券模板
-        List<Coupon> templates = couponService.list(Wrappers.<Coupon>lambdaQuery()
+        List<Coupon> templates = couponService.list(new LambdaQueryWrapper<Coupon>()
                 .eq(Coupon::getStatus, 1)
                 .eq(Coupon::getIsElimination, 0)
                 .orderByDesc(Coupon::getCreateTime));
@@ -216,10 +251,13 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         }
 
         // 当前用户已持有的券，用于算"已领张数"
-        List<CouponUser> mine = list(Wrappers.<CouponUser>lambdaQuery()
+        List<CouponUser> mine = list(new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getUserId, userId));
         Map<Long, Long> ownedCountMap = mine.stream()
                 .collect(Collectors.groupingBy(CouponUser::getCouponId, Collectors.counting()));
+
+        // 循环外先算一次"我持有的互斥组"，循环里只做集合判断，避免逐个模板全量查我的券
+        Set<Long> myMutexGroups = myMutexGroupCodes(mine);
 
         List<CouponTemplateVO> result = new ArrayList<>();
         for (Coupon coupon : templates) {
@@ -233,8 +271,11 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             long owned = ownedCountMap.getOrDefault(coupon.getId(), 0L);
             int limit = coupon.getLimitPerPerson() == null ? 1 : coupon.getLimitPerPerson();
 
-            // 互斥判断复用领券时的同一段逻辑，避免规则写两份
-            boolean blockedByMutex = isBlockedByMutex(userId, coupon);
+            // 互斥判断用循环外一次性算好的集合：isBlockedByMutex 每次调用都要全量查我的券，
+            // 放在循环里会被每个券模板各触发一次（N 张模板 = N 次全量查询）
+            boolean blockedByMutex = coupon.getMutexGroupCode() != null
+                    && coupon.getMutexGroupCode() != 0
+                    && myMutexGroups.contains(coupon.getMutexGroupCode());
 
             int remainToReceive = blockedByMutex ? 0 : (int) Math.max(0, limit - owned);
             if (remainToReceive <= 0) {
@@ -319,12 +360,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             throw new BusinessException(ResultCode.FAIL, "该券不可使用");
         }
 
-        // orderAmount 必填。
-        // 缺了它就没法判断满减券的门槛——calcDiscount 会对 null 走"按面值兜底"，
-        // 等于"满800减100"直接减100，门槛形同虚设。
-        if (dto.getOrderAmount() == null) {
-            throw new BusinessException(ResultCode.FAIL, "缺少订单金额，无法计算优惠");
-        }
+        // 金额不取客户端传的 orderAmount，改成从订单里读（见下面加载订单之后）
 
         // 订单必须存在且属于本人，否则会往别人的订单上写券关联（退款时会连带回滚）
         Order order = orderMapper.selectById(dto.getOrderId());
@@ -333,6 +369,17 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         }
         if (!order.getUserId().equals(userId)) {
             throw new BusinessException(ResultCode.FORBIDDEN, "无权在该订单上使用优惠券");
+        }
+
+        /**
+         * 抵扣金额一律以订单为准，不采信客户端传的 orderAmount。
+         * 这个接口对应的是"一笔已经存在的订单"，订单里本身就存着真实金额；
+         * 用客户端传来的金额算折扣，等于让调用方自己决定能抵多少钱 ——
+         * 随便配个假金额就能把一张"满 800 减 100"的券核销掉。
+         */
+        BigDecimal orderAmount = order.getTotalAmount();
+        if (orderAmount == null || orderAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(ResultCode.FAIL, "订单金额异常，无法使用优惠券");
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -354,7 +401,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         if (!isInScope(coupon, dto, order)) {
             throw new BusinessException(ResultCode.FAIL, "该券不适用于本单商品");
         }
-        BigDecimal discount = calcDiscount(coupon, dto.getOrderAmount());
+        BigDecimal discount = calcDiscount(coupon, orderAmount);
         if (discount == null || discount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException(ResultCode.FAIL, "该优惠券不满足使用条件或抵扣金额为0");
         }
@@ -395,7 +442,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         }
 
         List<CouponScopeDetail> scopes = couponScopeDetailMapper.selectList(
-                Wrappers.<CouponScopeDetail>lambdaQuery().eq(CouponScopeDetail::getCouponId, coupon.getId()));
+                new LambdaQueryWrapper<CouponScopeDetail>().eq(CouponScopeDetail::getCouponId, coupon.getId()));
         if (scopes.isEmpty()) {
             // 配了范围却没配明细，视为不可用，避免"范围券变成全场券"
             return false;
@@ -410,7 +457,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         }
         // 未指定明细（或明细不属于本单）：只要本单里有商品命中范围即可
         List<OrderItem> items = orderItemMapper.selectList(
-                Wrappers.<OrderItem>lambdaQuery().eq(OrderItem::getOrderId, order.getId()));
+                new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, order.getId()));
         for (OrderItem item : items) {
             if (scopeHits(scopes, item.getProductId())) {
                 return true;
@@ -466,7 +513,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         // 计数走原子 SQL，不会整行覆盖、也不会减成负数
         couponMapper.decreaseUsedQuota(userCoupon.getCouponId());
 
-        List<CouponOrderRel> rels = couponOrderRelMapper.selectList(Wrappers.<CouponOrderRel>lambdaQuery()
+        List<CouponOrderRel> rels = couponOrderRelMapper.selectList(new LambdaQueryWrapper<CouponOrderRel>()
                 .eq(CouponOrderRel::getUserCouponId, userCouponId)
                 .eq(CouponOrderRel::getRelStatus, 1));
         for (CouponOrderRel rel : rels) {
@@ -481,16 +528,25 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     @Transactional(rollbackFor = Exception.class)
     public void scanExpired() {
         LocalDateTime now = LocalDateTime.now();
-        List<CouponUser> expired = list(Wrappers.<CouponUser>lambdaQuery()
+        List<CouponUser> expired = list(new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getUseStatus, CouponUseStatusEnum.UNUSED)
                 .lt(CouponUser::getValidEnd, now));
+        int changed = 0;
         for (CouponUser cu : expired) {
-            cu.setUseStatus(CouponUseStatusEnum.EXPIRED);
-            cu.setUpdateTime(now);
+            /**
+             * 逐条按"仍然是未使用"条件更新。
+             * 原来是把查出来的对象直接 updateBatchById：从查到这批数据到批量提交之间
+             * （券多的时候这段时间不短），用户刚核销掉的那张券也会被一起改成"已过期"，
+             * 之后这笔订单退款再也回滚不回来。影响行数 0 说明状态已被别人改过，跳过。
+             */
+            if (baseMapper.changeStatusIf(cu.getId(),
+                    CouponUseStatusEnum.UNUSED.getCode(),
+                    CouponUseStatusEnum.EXPIRED.getCode()) > 0) {
+                changed++;
+            }
         }
-        if (!expired.isEmpty()) {
-            updateBatchById(expired);
-            log.info("优惠券过期扫描：处理 {} 张", expired.size());
+        if (changed > 0) {
+            log.info("优惠券过期扫描：本次扫到 {} 张，实际置为过期 {} 张", expired.size(), changed);
         }
     }
 

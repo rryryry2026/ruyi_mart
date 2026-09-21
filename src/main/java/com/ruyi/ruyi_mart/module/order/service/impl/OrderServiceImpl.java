@@ -3,6 +3,7 @@ package com.ruyi.ruyi_mart.module.order.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.address.entity.Address;
@@ -17,6 +18,8 @@ import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
 import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderItemMapper;
+import com.ruyi.ruyi_mart.module.product.entity.Product;
+import com.ruyi.ruyi_mart.module.product.mapper.ProductMapper;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
 import com.ruyi.ruyi_mart.module.order.mq.OrderEventProducer;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
@@ -64,6 +67,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private CouponUserService couponUserService;
     @Autowired
     private UserMapper userMapper;
+    @Autowired
+    private ProductMapper productMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -71,6 +76,22 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         List<CartItemVO> cartItems = cartService.list(userId,null);
         if(cartItems == null || cartItems.isEmpty()){
             throw new BusinessException(ResultCode.NOT_FIND,"购物车为空，无法下单");
+        }
+
+        /**
+         * 下单前用当前价复核一遍购物车里的快照价。
+         * 购物车存的是"加购那一刻"的价格，商品涨价后老购物车仍能按旧价下单（商家吃亏），
+         * 降价则用户吃亏。发现不一致就拦下来，让用户回购物车刷新后再下单 —— 电商的常规做法。
+         */
+        for(CartItemVO ci : cartItems){
+            Product current = productMapper.selectById(ci.getProductId());
+            if(current == null){
+                throw new BusinessException(ResultCode.NOT_FIND, "商品已下架：" + ci.getName());
+            }
+            if(current.getPrice() == null || current.getPrice().compareTo(ci.getPrice()) != 0){
+                throw new BusinessException(ResultCode.FAIL,
+                        "商品价格已变动，请返回购物车刷新后重新下单：" + ci.getName());
+            }
         }
 
         // 收货地址：必填，且必须是本人的地址（否则可以指定别人的地址下单）
@@ -97,7 +118,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         Order order = new Order();
         order.setOrderNo(generateOrderNo());
         order.setUserId(userId);
-        order.setStatus(0);
+        order.setStatus(OrderStatus.PENDING.getCode());
         order.setTotalAmount(BigDecimal.ZERO);
         // 把地址内容复制进订单做快照，之后地址被改被删都不影响这一单
         order.setReceiver(address.getReceiver());
@@ -163,14 +184,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     public List<OrderVO> listOrders(Long userId){
-        QueryWrapper<Order> qw = new QueryWrapper<>();
-        qw.eq("user_id",userId).orderByDesc("create_time");
+        LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
+        qw.eq(Order::getUserId,userId).orderByDesc(Order::getCreateTime);
         List<Order> orders = baseMapper.selectList(qw);
-        List<OrderVO> result = new ArrayList<>();
-        for(Order o :orders){
-            result.add(toVO(o));
-        }
-        return result;
+        //批量转 VO：明细一次查完，避免逐单查明细的 N+1
+        return toVOList(orders);
     }
 
     @Override
@@ -216,22 +234,24 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         if (order.getStatus() == OrderStatus.PAID.getCode()) {
             return;
         }
-        if (order.getStatus() != OrderStatus.PENDING.getCode()) {
-            throw new BusinessException(ResultCode.FAIL, "订单状态异常，无法完成支付");
+        /**
+         * 上面那句状态判断只用来给出准确提示，真正管用的是这句条件更新。
+         * 支付回调进来的同时，定时任务可能正好在关这笔超时单、用户也可能刚点了取消：
+         * 两边都读到"待支付"就会各自往下走 —— 已关闭的订单被改成"已支付"，
+         * 库存还被"确认"了一次（锁定转消耗）。抢不到就说明别人已经处理过了。
+         * 库存确认必须放在抢到状态之后，否则输的那一方也会动库存。
+         */
+        if (baseMapper.changeStatusIf(orderId, OrderStatus.PENDING.getCode(),
+                OrderStatus.PAID.getCode()) == 0) {
+            throw new BusinessException(ResultCode.FAIL, "订单状态已变更，无法完成支付");
         }
 
-        QueryWrapper<OrderItem> qw = new QueryWrapper<>();
-        qw.eq("order_id", orderId);
+        LambdaQueryWrapper<OrderItem> qw = new LambdaQueryWrapper<>();
+        qw.eq(OrderItem::getOrderId, orderId);
         List<OrderItem> items = orderItemMapper.selectList(qw);
         for (OrderItem item : items) {
             stockService.confirm(item.getProductId(), item.getQuantity());
         }
-
-        Order upd = new Order();
-        upd.setId(orderId);
-        upd.setStatus(OrderStatus.PAID.getCode());
-        upd.setUpdateTime(LocalDateTime.now());
-        baseMapper.updateById(upd);
     }
 
     @Override
@@ -298,8 +318,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
      * 只允许在"抢到状态流转"之后调用 —— 单独调它等于重复回补。
      */
     private void releaseStock(Long orderId){
-        QueryWrapper<OrderItem> qw = new QueryWrapper<>();
-        qw.eq("order_id",orderId);
+        LambdaQueryWrapper<OrderItem> qw = new LambdaQueryWrapper<>();
+        qw.eq(OrderItem::getOrderId,orderId);
         List<OrderItem> items = orderItemMapper.selectList(qw);
         for(OrderItem item:items){
             stockService.release(item.getProductId(), item.getQuantity());
@@ -317,11 +337,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         if(order.getStatus() != OrderStatus.PAID.getCode()){
             throw new BusinessException(ResultCode.FAIL,"只有已支付订单才能发货");
         }
-        Order upd = new Order();
-        upd.setId(orderId);
-        upd.setStatus(OrderStatus.SHIPPED.getCode());
-        upd.setUpdateTime(LocalDateTime.now());
-        baseMapper.updateById(upd);
+        //条件更新抢状态：退款审核可能正在把订单改成"已退款"，不能把已退款的单又改成"已发货"
+        if(baseMapper.changeStatusIf(orderId, OrderStatus.PAID.getCode(),
+                OrderStatus.SHIPPED.getCode()) == 0){
+            throw new BusinessException(ResultCode.FAIL,"订单状态已变更，无法发货");
+        }
         return toVO(baseMapper.selectById(orderId));
     }
 
@@ -339,44 +359,38 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         if(order.getStatus() != OrderStatus.SHIPPED.getCode()){
             throw new BusinessException(ResultCode.FAIL,"只有已发货订单才能确认收货");
         }
-        Order upd = new Order();
-        upd.setId(orderId);
-        upd.setStatus(OrderStatus.COMPLETED.getCode());
-        upd.setUpdateTime(LocalDateTime.now());
-        baseMapper.updateById(upd);
+        //同一笔订单可能被连点两下"确认收货"，用条件更新保证只有一次状态流转生效
+        if(baseMapper.changeStatusIf(orderId, OrderStatus.SHIPPED.getCode(),
+                OrderStatus.COMPLETED.getCode()) == 0){
+            throw new BusinessException(ResultCode.FAIL,"订单状态已变更，无法确认收货");
+        }
         return toVO(baseMapper.selectById(orderId));
     }
 
 
     @Override
     public List<OrderVO> listOrdersByStatus(Long userId, Integer status){
-        QueryWrapper<Order> qw = new QueryWrapper<>();
-        qw.eq("user_id",userId).eq("status",status).orderByDesc("create_time");
+        LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
+        qw.eq(Order::getUserId,userId).eq(Order::getStatus,status).orderByDesc(Order::getCreateTime);
         List<Order> orders = baseMapper.selectList(qw);
-        List<OrderVO> result = new ArrayList<>();
-        for(Order o : orders){
-            result.add(toVO(o));
-        }
-        return result;
+        return toVOList(orders);
     }
+
 
     @Override
     public Page<OrderVO> listOrdersPage(Long userId,Integer status,int pageNum,int pageSize){
         Page<Order> page = new Page<>(pageNum,pageSize);
-        QueryWrapper<Order> qw = new QueryWrapper<>();
-        qw.eq("user_id",userId);
+        LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
+        qw.eq(Order::getUserId,userId);
         if(status != null){
-            qw.eq("status",status);
+            qw.eq(Order::getStatus,status);
         }
-        qw.orderByDesc("create_time");
+        qw.orderByDesc(Order::getCreateTime);
         baseMapper.selectPage(page,qw);
 
         Page<OrderVO> voPage = new Page<>(page.getCurrent(),page.getSize(),page.getTotal());
-        List<OrderVO> vos = new ArrayList<>();
-        for(Order o :page.getRecords()){
-            vos.add(toVO(o));
-        }
-        voPage.setRecords(vos);
+        //批量转 VO：明细一次查完，避免逐单查明细的 N+1
+        voPage.setRecords(toVOList(page.getRecords()));
         return voPage;
     }
 
@@ -384,44 +398,36 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Override
     public Page<OrderAdminVO> adminListOrders(OrderAdminQueryDTO dto){
         Page<Order> page = new Page<>(dto.getPageNum(), dto.getPageSize());
-        QueryWrapper<Order> qw = new QueryWrapper<>();
+        LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
         if(StringUtils.hasText(dto.getOrderNo())){
-            qw.eq("order_no", dto.getOrderNo());
+            qw.eq(Order::getOrderNo, dto.getOrderNo());
         }
         if(dto.getStatus() != null){
-            qw.eq("status", dto.getStatus());
+            qw.eq(Order::getStatus, dto.getStatus());
         }
         if(dto.getStartTime() != null){
-            qw.ge("create_time", dto.getStartTime().atStartOfDay());
+            qw.ge(Order::getCreateTime, dto.getStartTime().atStartOfDay());
         }
         if(dto.getEndTime() != null){
-            qw.le("create_time", dto.getEndTime().atTime(LocalTime.MAX));
+            qw.le(Order::getCreateTime, dto.getEndTime().atTime(LocalTime.MAX));
         }
         if(StringUtils.hasText(dto.getKeyword())){
             // 先按买家用户名/昵称解析出用户ID集合，再过滤订单，保证分页总数正确
-            List<Long> userIds = userMapper.selectList(new QueryWrapper<User>()
-                            .like("username", dto.getKeyword())
-                            .or().like("nickname", dto.getKeyword()))
+            List<Long> userIds = userMapper.selectList(new LambdaQueryWrapper<User>()
+                            .like(User::getUsername, dto.getKeyword())
+                            .or().like(User::getNickname, dto.getKeyword()))
                     .stream().map(User::getId).collect(Collectors.toList());
             if(userIds.isEmpty()){
                 return new Page<>(dto.getPageNum(), dto.getPageSize());
             }
-            qw.in("user_id", userIds);
+            qw.in(Order::getUserId, userIds);
         }
-        qw.orderByDesc("create_time");
+        qw.orderByDesc(Order::getCreateTime);
         baseMapper.selectPage(page, qw);
 
         Page<OrderAdminVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
-        List<OrderAdminVO> vos = new ArrayList<>();
-        if(!page.getRecords().isEmpty()){
-            Map<Long, User> userMap = userMapper.selectBatchIds(
-                            page.getRecords().stream().map(Order::getUserId).collect(Collectors.toList()))
-                    .stream().collect(Collectors.toMap(User::getId, Function.identity()));
-            for(Order o : page.getRecords()){
-                vos.add(toAdminVO(o, userMap.get(o.getUserId())));
-            }
-        }
-        voPage.setRecords(vos);
+        //买家与明细都批量查一次，避免逐单查明细的 N+1
+        voPage.setRecords(toAdminVOList(page.getRecords()));
         return voPage;
     }
 
@@ -435,7 +441,15 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return toAdminVO(order, user);
     }
 
+    /**单笔转换：自己查一次明细*/
     private OrderAdminVO toAdminVO(Order order, User user){
+        LambdaQueryWrapper<OrderItem> qw = new LambdaQueryWrapper<>();
+        qw.eq(OrderItem::getOrderId, order.getId());
+        return toAdminVO(order, user, orderItemMapper.selectList(qw));
+    }
+
+    /**带明细的管理端转换：明细由 toAdminVOList 一次查好传进来*/
+    private OrderAdminVO toAdminVO(Order order, User user, List<OrderItem> items){
         OrderAdminVO vo = new OrderAdminVO();
         vo.setId(order.getId());
         vo.setOrderNo(order.getOrderNo());
@@ -443,9 +457,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         vo.setTotalAmount(order.getTotalAmount());
         vo.setStatus(order.getStatus());
         vo.setCreateTime(order.getCreateTime());
-        QueryWrapper<OrderItem> qw = new QueryWrapper<>();
-        qw.eq("order_id", order.getId());
-        vo.setItems(orderItemMapper.selectList(qw));
+        vo.setItems(items);
         if(user != null){
             vo.setBuyerUsername(user.getUsername());
             vo.setBuyerNickname(user.getNickname());
@@ -453,7 +465,45 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return vo;
     }
 
+    /**管理端批量转换：买家与明细各查一次，避免逐单查明细的 N+1*/
+    private List<OrderAdminVO> toAdminVOList(List<Order> orders){
+        if(orders.isEmpty()){
+            return new ArrayList<>();
+        }
+        List<Long> orderIds = new ArrayList<>();
+        for(Order o : orders){
+            orderIds.add(o.getId());
+        }
+        Map<Long, User> userMap = userMapper.selectBatchIds(
+                        orders.stream().map(Order::getUserId).collect(Collectors.toList()))
+                .stream().collect(Collectors.toMap(User::getId, Function.identity()));
+
+        LambdaQueryWrapper<OrderItem> itemQw = new LambdaQueryWrapper<>();
+        itemQw.in(OrderItem::getOrderId, orderIds);
+        Map<Long, List<OrderItem>> itemMap = orderItemMapper.selectList(itemQw).stream()
+                .collect(Collectors.groupingBy(OrderItem::getOrderId));
+
+        List<OrderAdminVO> result = new ArrayList<>();
+        for(Order o : orders){
+            result.add(toAdminVO(o, userMap.get(o.getUserId()),
+                    itemMap.getOrDefault(o.getId(), new ArrayList<>())));
+        }
+        return result;
+    }
+
+    /**单笔转换：自己查一次明细*/
     private OrderVO toVO(Order order){
+        LambdaQueryWrapper<OrderItem> qw = new LambdaQueryWrapper<>();
+        qw.eq(OrderItem::getOrderId, order.getId());
+        return toVO(order, orderItemMapper.selectList(qw));
+    }
+
+    /**
+     * 带明细的转换。
+     * 列表场景要先用 toVOList 把明细一次查回来传进来，
+     * 否则每笔订单都单独查一遍明细 —— 100 单就是 101 次查询。
+     */
+    private OrderVO toVO(Order order, List<OrderItem> items){
         OrderVO vo = new OrderVO();
         vo.setId(order.getId());
         vo.setOrderNo(order.getOrderNo());
@@ -468,10 +518,29 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         vo.setCity(order.getCity());
         vo.setDistrict(order.getDistrict());
         vo.setDetailAddress(order.getDetailAddress());
-        QueryWrapper<OrderItem> qw = new QueryWrapper<>();
-        qw.eq("order_id",order.getId());
-        vo.setItems(orderItemMapper.selectList(qw));
+        vo.setItems(items);
         return vo;
+    }
+
+    /**批量转换：明细一次查完按 orderId 分组，避免 N+1*/
+    private List<OrderVO> toVOList(List<Order> orders){
+        if(orders.isEmpty()){
+            return new ArrayList<>();
+        }
+        List<Long> orderIds = new ArrayList<>();
+        for(Order o : orders){
+            orderIds.add(o.getId());
+        }
+        LambdaQueryWrapper<OrderItem> itemQw = new LambdaQueryWrapper<>();
+        itemQw.in(OrderItem::getOrderId, orderIds);
+        Map<Long, List<OrderItem>> itemMap = orderItemMapper.selectList(itemQw).stream()
+                .collect(Collectors.groupingBy(OrderItem::getOrderId));
+
+        List<OrderVO> result = new ArrayList<>();
+        for(Order o : orders){
+            result.add(toVO(o, itemMap.getOrDefault(o.getId(), new ArrayList<>())));
+        }
+        return result;
     }
 
     private String generateOrderNo(){

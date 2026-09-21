@@ -3,6 +3,7 @@ package com.ruyi.ruyi_mart.security.config;
 import org.springframework.http.HttpMethod;
 import com.ruyi.ruyi_mart.security.filter.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -29,12 +30,21 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    /**跨域允许的来源，逗号分隔的 origin 模式；默认只放本机各端口（开发期前端端口常变），上线改成自己的域名*/
+    @Value("${ruyi-mart.cors.allowed-origins:http://localhost:*,http://127.0.0.1:*}")
+    private String corsAllowedOrigins;
+
     /**cors跨域配置。*/
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        //允许哪些来源。支持通配符 + 凭证共存。
-        config.setAllowedOriginPatterns(List.of("*"));
+        /**
+         * 允许哪些来源（逗号分隔的 origin 模式，可用 * 作端口通配）。
+         * 这里不能用 "*"：配合下面的 allowCredentials(true)，等于对全网开放——
+         * 任何站点的页面都能带着用户浏览器里的凭证来调你的接口。
+         * 默认只放本机各端口（前端 H5 和管理端的开发地址都会变），上线时改成自己的域名。
+         */
+        config.setAllowedOriginPatterns(List.of(corsAllowedOrigins.split(",")));
         //允许哪些方法。
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         //允许哪些请求头。

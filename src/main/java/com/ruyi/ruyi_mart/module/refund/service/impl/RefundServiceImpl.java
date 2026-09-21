@@ -3,6 +3,7 @@ package com.ruyi.ruyi_mart.module.refund.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.coupon.entity.CouponOrderRel;
@@ -55,7 +56,9 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Refund apply(Long userId, Long orderId, String reason){
-        Order order = orderMapper.selectById(orderId);
+        // 加行锁读订单：下面的"有没有进行中的退款"是查完再插入，不串行化的话
+        // 同一笔订单并发申请会插出两张退款单，之后各审各的、库存回补两次
+        Order order = orderMapper.selectByIdForUpdate(orderId);
         if(order == null){
             throw new BusinessException(ResultCode.NOT_FIND, "订单不存在");
         }
@@ -70,9 +73,9 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
             throw new BusinessException(ResultCode.FAIL, "只有已支付/已发货/已完成的订单才能申请退款");
         }
 
-        QueryWrapper<Refund> qw = new QueryWrapper<>();
-        qw.eq("order_id",orderId)
-                .in("status", RefundStatus.PENDING.getCode(),RefundStatus.REFUNDED.getCode());
+        LambdaQueryWrapper<Refund> qw = new LambdaQueryWrapper<>();
+        qw.eq(Refund::getOrderId,orderId)
+                .in(Refund::getStatus, RefundStatus.PENDING.getCode(),RefundStatus.REFUNDED.getCode());
         if(baseMapper.selectCount(qw) > 0 ){
             throw new BusinessException(ResultCode.FAIL, "该订单已有进行中的退款申请");
         }
@@ -92,8 +95,8 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
 
     @Override
     public List<Refund> listByUser(Long userId){
-        QueryWrapper<Refund> qw = new QueryWrapper<>();
-        qw.eq("user_id",userId).orderByDesc("create_time");
+        LambdaQueryWrapper<Refund> qw = new LambdaQueryWrapper<>();
+        qw.eq(Refund::getUserId,userId).orderByDesc(Refund::getCreateTime);
         return baseMapper.selectList(qw);
     }
 
@@ -127,15 +130,15 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
             throw new BusinessException(ResultCode.FAIL, "只有待审核的退款单才能审核");
         }
         Long orderId = refund.getOrderId();
-        QueryWrapper<OrderItem> itemQw = new QueryWrapper<>();
-        itemQw.eq("order_id",orderId);
+        LambdaQueryWrapper<OrderItem> itemQw = new LambdaQueryWrapper<>();
+        itemQw.eq(OrderItem::getOrderId,orderId);
         List<OrderItem> items = orderItemMapper.selectList(itemQw);
         for(OrderItem item : items){
             stockService.refund(item.getProductId(),item.getQuantity());
         }
 
-        QueryWrapper<CouponOrderRel> relQw = new QueryWrapper<>();
-        relQw.eq("order_id", orderId).eq("rel_status", 1);
+        LambdaQueryWrapper<CouponOrderRel> relQw = new LambdaQueryWrapper<>();
+        relQw.eq(CouponOrderRel::getOrderId, orderId).eq(CouponOrderRel::getRelStatus, 1);
         List<CouponOrderRel> rels = couponOrderRelMapper.selectList(relQw);
         for (CouponOrderRel rel : rels) {
             couponUserService.refundRollback(rel.getUserCouponId());
@@ -163,21 +166,30 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
         if(refund.getStatus() != RefundStatus.PENDING.getCode()){
             throw new BusinessException(ResultCode.FAIL, "只有待审核的退款单才能审核");
         }
+        /**
+         * 和 approve 一样先抢状态流转，不要无条件 updateById。
+         * 否则在"读到待审核"和"写回已拒绝"之间，另一个管理员点了同意
+         * （CAS 成功、退了库存、回滚了券），随后这次 reject 又把单子改成"已拒绝" ——
+         * 单子显示已拒绝，但钱、库存、券其实都已经退回去了，状态与事实不符。
+         */
+        if(baseMapper.changeStatusIf(refundId, RefundStatus.PENDING.getCode(),
+                RefundStatus.REJECTED.getCode()) == 0){
+            throw new BusinessException(ResultCode.FAIL, "只有待审核的退款单才能审核");
+        }
         refund.setStatus(RefundStatus.REJECTED.getCode());
         refund.setRejectReason(rejectReason);
         refund.setUpdateTime(LocalDateTime.now());
-        baseMapper.updateById(refund);
         return refund;
     }
 
     @Override
     public Page<RefundAdminVO> adminPageRefunds(Integer status, int pageNum, int pageSize){
         Page<Refund> page = new Page<>(pageNum, pageSize);
-        QueryWrapper<Refund> qw = new QueryWrapper<>();
+        LambdaQueryWrapper<Refund> qw = new LambdaQueryWrapper<>();
         if(status != null){
-            qw.eq("status", status);
+            qw.eq(Refund::getStatus, status);
         }
-        qw.orderByDesc("create_time");
+        qw.orderByDesc(Refund::getCreateTime);
         this.page(page, qw);
 
         Page<RefundAdminVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());

@@ -1,6 +1,7 @@
 package com.ruyi.ruyi_mart.module.order.task;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
@@ -39,8 +40,8 @@ public class OrderTimeoutCloseTask {
     @Scheduled(fixedDelay = 60_000)
     public void closeExpiredOrders(){
         LocalDateTime deadline = LocalDateTime.now().minusMinutes(TIMEOUT_MINUTES);
-        QueryWrapper<Order> qw = new QueryWrapper<>();
-        qw.eq("status",0).lt("create_time",deadline);
+        LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
+        qw.eq(Order::getStatus,0).lt(Order::getCreateTime,deadline);
         List<Order> expired = orderMapper.selectList((qw));
         if(expired.isEmpty()){
             return;

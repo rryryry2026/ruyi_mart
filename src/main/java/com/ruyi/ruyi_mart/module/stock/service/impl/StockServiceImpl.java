@@ -2,6 +2,7 @@ package com.ruyi.ruyi_mart.module.stock.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruyi.ruyi_mart.module.category.entity.Category;
 import com.ruyi.ruyi_mart.module.category.mapper.CategoryMapper;
 import com.ruyi.ruyi_mart.module.product.entity.Product;
@@ -113,14 +114,14 @@ public class StockServiceImpl implements StockService {
     public Page<ProductStockVO> adminStockPage(String keyword, Long categoryId, int pageNum, int pageSize){
         // 以商品为主表分页，再左连库存——没初始化过库存的商品也能列出来
         Page<Product> productPage = new Page<>(pageNum, pageSize);
-        QueryWrapper<Product> qw = new QueryWrapper<>();
+        LambdaQueryWrapper<Product> qw = new LambdaQueryWrapper<>();
         if(StringUtils.hasText(keyword)){
-            qw.like("name", keyword);
+            qw.like(Product::getName, keyword);
         }
         if(categoryId != null){
-            qw.eq("category_id", categoryId);
+            qw.eq(Product::getCategoryId, categoryId);
         }
-        qw.orderByDesc("create_time");
+        qw.orderByDesc(Product::getCreateTime);
         productMapper.selectPage(productPage, qw);
 
         Page<ProductStockVO> voPage = new Page<>(productPage.getCurrent(), productPage.getSize(), productPage.getTotal());

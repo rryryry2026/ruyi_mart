@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponCreateDTO;
@@ -42,7 +43,7 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
         int pageNum = dto.getPage() == null ? 1 : dto.getPage();
         int pageSize = dto.getSize() == null ? 10 : dto.getSize();
         Page<Coupon> page = new Page<>(pageNum, pageSize);
-        return page(page, Wrappers.<Coupon>lambdaQuery()
+        return page(page, new LambdaQueryWrapper<Coupon>()
                 .like(StringUtils.hasText(dto.getActivityName()),Coupon::getActivityName,dto.getActivityName())
                         .eq(dto.getCouponType() != null,Coupon::getCouponType,dto.getCouponType())
                         .eq(dto.getStatus() != null,Coupon::getStatus,dto.getStatus())
@@ -97,7 +98,7 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
         // 已经有人领过的模板不允许物理删除：删掉会让这些券变成孤儿，
         // 用户券包里只剩一个查不到的 couponId（面额、门槛全空白）。
         // 想让券停止发放，应该用"改状态为已结束/作废"。
-        long held = couponUserMapper.selectCount(Wrappers.<CouponUser>lambdaQuery()
+        long held = couponUserMapper.selectCount(new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getCouponId, id));
         if (held > 0) {
             throw new BusinessException(ResultCode.FAIL,
