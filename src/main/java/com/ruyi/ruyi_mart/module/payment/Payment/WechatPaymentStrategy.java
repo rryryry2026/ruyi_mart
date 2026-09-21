@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
+/**微信支付策略。*/
 @Slf4j
 @Component
 public class WechatPaymentStrategy implements PaymentStrategy{

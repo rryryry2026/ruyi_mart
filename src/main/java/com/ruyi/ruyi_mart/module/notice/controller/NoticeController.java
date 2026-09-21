@@ -16,6 +16,7 @@ import java.util.List;
  * 读写权限的划分与 BannerController 一致：
  * 读接口放行给消费端，写接口用 @PreAuthorize 限管理员。
  */
+/**公告业务模块的接口层。*/
 @RestController
 @RequestMapping("/notice")
 public class NoticeController {

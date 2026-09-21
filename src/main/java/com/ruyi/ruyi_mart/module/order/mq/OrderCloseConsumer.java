@@ -36,11 +36,9 @@ public class OrderCloseConsumer implements RocketMQListener<String> {
             log.warn("延迟关单消息到达，但订单不存在 orderId={}", orderId);
             return;
         }
-        /**
-         * 这里不再自己判状态、也不再抢 Redis 标记：
-         * 消息可能和定时任务、用户取消同时到达，只有数据库那次条件更新说了算。
-         * closePendingOrder 抢不到状态流转就什么都不会做（包括不回补库存）。
-         */
+        // 这里不再自己判状态、也不再抢 Redis 标记：
+        // 消息可能和定时任务、用户取消同时到达，只有数据库那次条件更新说了算。
+        // closePendingOrder 抢不到状态流转就什么都不会做（包括不回补库存）。
         if(orderService.closePendingOrder(orderId)){
             log.info("延迟消息触发，订单 {} 已关闭并回补库存", orderId);
         }else{

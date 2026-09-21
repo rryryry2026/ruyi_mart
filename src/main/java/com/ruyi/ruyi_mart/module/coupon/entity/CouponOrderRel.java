@@ -9,7 +9,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-//CouponOrderRel表的镜像。券<->订单的关联表。
+/**CouponOrderRel表的镜像。券<->订单的关联表。*/
 @Data
 @TableName("coupon_order_rel")
 public class CouponOrderRel {

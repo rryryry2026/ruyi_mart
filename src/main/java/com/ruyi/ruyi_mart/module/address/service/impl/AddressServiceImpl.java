@@ -11,9 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**收货地址业务的真正实现。*/
 @Service
 public class AddressServiceImpl extends ServiceImpl<AddressMapper,Address> implements AddressService {
 
+    /**查所有地址列表。*/
     @Override
     public List<Address> getAddressList(Long userId) {
         return lambdaQuery()
@@ -23,6 +25,7 @@ public class AddressServiceImpl extends ServiceImpl<AddressMapper,Address> imple
                 .list();
     }
 
+    /**新增地址。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void insertAddress(Address address, Long userId){
@@ -33,6 +36,7 @@ public class AddressServiceImpl extends ServiceImpl<AddressMapper,Address> imple
         save(address);
     }
 
+    /**修改地址。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateAddress(Address address,Long userId){
@@ -50,6 +54,7 @@ public class AddressServiceImpl extends ServiceImpl<AddressMapper,Address> imple
         updateById(address);
     }
 
+    /**删除地址。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteAddress(Long id, Long userId){
@@ -62,6 +67,7 @@ public class AddressServiceImpl extends ServiceImpl<AddressMapper,Address> imple
         }
     }
 
+    /**清除其他默认地址。*/
     private void clearOtherDefault(Long userId){
         lambdaUpdate()
                 .eq(Address::getUserId,userId)

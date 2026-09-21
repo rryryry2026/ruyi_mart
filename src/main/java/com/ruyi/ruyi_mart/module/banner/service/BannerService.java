@@ -8,6 +8,7 @@ import com.ruyi.ruyi_mart.module.banner.entity.Banner;
 
 import java.util.List;
 
+/**轮播图业务接口，声明方法。*/
 public interface BannerService extends IService<Banner> {
 
     /** 后台列表:全部轮播图,按 sort 升序 */

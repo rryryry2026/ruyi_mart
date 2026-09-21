@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 
+/**支付结果的vo对象。*/
 @Data
 public class PaymentResult {
 

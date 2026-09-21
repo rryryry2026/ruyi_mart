@@ -4,6 +4,7 @@ import com.ruyi.ruyi_mart.module.banner.enums.BannerStatus;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+/**接收前端传来的轮播图参数。*/
 @Data
 public class BannerDTO {
 

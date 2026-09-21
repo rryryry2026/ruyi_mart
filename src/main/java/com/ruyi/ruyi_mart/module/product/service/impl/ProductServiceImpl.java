@@ -20,6 +20,7 @@ import java.io.Serializable;
 import java.util.concurrent.TimeUnit;
 
 
+/**商品业务模块具体实现。*/
 @Service
 public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> implements ProductService {
 
@@ -31,6 +32,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     private static final String KEY_PREFIX = "ruyi:product:detail:";
     private static final long CACHE_TTL_SECONDS = 30 * 60;
 
+    /**查商品详情。*/
     @Override
     public Product getById(Serializable id){
         String key = KEY_PREFIX + id;
@@ -46,6 +48,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         return product;
     }
 
+    /**商品改动。*/
     @Override
     public boolean updateById(Product entity){
         boolean r = super.updateById(entity);
@@ -53,6 +56,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         return r;
     }
 
+    /**删除商品。*/
     @Override
     public boolean removeById(Serializable id){
         boolean r = super.removeById(id);
@@ -60,6 +64,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         return r;
     }
 
+    /**商品列表分页。*/
     @Override
     public Page<Product> pageQuery(ProductQueryDTO q){
         int pageNum = (q.getPageNum() == null || q.getPageNum() < 1) ? 1 :q.getPageNum();
@@ -81,6 +86,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
 
     }
 
+    /**修改商品状态 启用/禁用*/
     @Override
     public void updateStatus(Long id, Integer targetStatus){
         Product p = new Product();
@@ -90,6 +96,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     }
 
 
+    /**序列化*/
     private String serialize(Product p){
         try{
             return  objectMapper.writeValueAsString(p);
@@ -98,6 +105,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         }
     }
 
+    /**反序列化*/
     private Product deserialize(String json){
         try{
             return objectMapper.readValue(json, Product.class);

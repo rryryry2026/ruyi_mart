@@ -13,16 +13,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**热搜词业务模块实现。*/
 @Service
 public class HotKeywordServiceImpl extends ServiceImpl<HotKeywordMapper, HotKeyword> implements HotKeywordService {
 
     private static final int STATUS_ENABLED = 1;
 
+    /**所以热搜词列表。*/
     @Override
     public List<HotKeyword> listAll() {
         return lambdaQuery().orderByAsc(HotKeyword::getSort).orderByDesc(HotKeyword::getId).list();
     }
 
+    /**仅启用的热搜词。*/
     @Override
     public List<HotKeyword> listEnabled(Integer limit) {
         var query = lambdaQuery()
@@ -35,6 +38,7 @@ public class HotKeywordServiceImpl extends ServiceImpl<HotKeywordMapper, HotKeyw
         return query.list();
     }
 
+    /**新增热搜词。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addKeyword(HotKeywordDTO dto) {
@@ -47,6 +51,7 @@ public class HotKeywordServiceImpl extends ServiceImpl<HotKeywordMapper, HotKeyw
         save(entity);
     }
 
+    /**修改热搜词。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateKeyword(Long id, HotKeywordDTO dto) {
@@ -61,6 +66,7 @@ public class HotKeywordServiceImpl extends ServiceImpl<HotKeywordMapper, HotKeyw
         updateById(existing);
     }
 
+    /**删除热搜词。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteKeyword(Long id) {
@@ -69,6 +75,7 @@ public class HotKeywordServiceImpl extends ServiceImpl<HotKeywordMapper, HotKeyw
         }
     }
 
+    /**修改热搜词状态。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateStatus(Long id, Integer status) {

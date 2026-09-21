@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**收货地址管理的接口层，身份信息只从token上取，杜绝水平越权漏洞。*/
 @RestController
 @RequestMapping("/address")
 public class AddressController {
@@ -17,6 +18,10 @@ public class AddressController {
     @Autowired
     private AddressService addressService;
 
+    /**
+     * 获取登录Id。
+     * spring security的过滤器负责‘存入’和‘请求结束后清除‘。
+     */
     private Long currentUserId(){
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if(auth != null && auth.getPrincipal() instanceof Long){
@@ -25,23 +30,28 @@ public class AddressController {
         return null;
     }
 
+    /**查列表。*/
     @GetMapping("/list")
     public Result<List<Address>> list(){
+
         return Result.success(addressService.getAddressList(currentUserId()));
     }
 
+    /**新增地址。*/
     @PostMapping("/add")
     public Result<Void> add(@RequestBody Address address){
         addressService.insertAddress(address,currentUserId());
         return Result.success();
     }
 
+    /**修改地址。*/
     @PutMapping("/update")
     public Result<Void> update(@RequestBody Address address){
         addressService.updateAddress(address,currentUserId());
         return Result.success();
     }
 
+    /**删除地址。*/
     @DeleteMapping("/delete")
     public Result<Void> delete(@RequestParam Long id){
         addressService.deleteAddress(id,currentUserId());

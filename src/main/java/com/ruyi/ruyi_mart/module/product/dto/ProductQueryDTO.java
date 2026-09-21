@@ -2,6 +2,7 @@ package com.ruyi.ruyi_mart.module.product.dto;
 
 import lombok.Data;
 
+/**商品查询参数dto。*/
 @Data
 public class ProductQueryDTO {
     /** 页码，默认 1（可不传） */

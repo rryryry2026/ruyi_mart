@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-//消费端：注册 / 改密码 / 改资料。管理端的用户管理在 /admin/user 下。
+/**消费端：注册 / 改密码 / 改资料。管理端的用户管理在 /admin/user 下。*/
 @RestController
 @RequestMapping("/user")
 public class UserController {

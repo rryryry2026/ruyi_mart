@@ -7,7 +7,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 
 
-//核销优惠券的入参。
+/**核销优惠券的入参。*/
 @Data
 public class CouponUseDTO {
 

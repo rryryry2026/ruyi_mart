@@ -8,6 +8,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**“product”表的镜像。*/
 @Data
 @TableName("product")
 public class Product {
@@ -21,6 +22,7 @@ public class Product {
     private String description;
     private Integer status;
     private Long categoryId;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

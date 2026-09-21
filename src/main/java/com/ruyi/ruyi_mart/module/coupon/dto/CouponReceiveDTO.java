@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 
-//领取优惠券的入参。
+/**领取优惠券的入参。*/
 @Data
 public class CouponReceiveDTO {
 

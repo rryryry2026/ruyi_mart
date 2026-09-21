@@ -20,23 +20,26 @@ import java.util.List;
 import java.util.Map;
 
 
+/**购物车业务的具体实现。*/
 @Service
 public class CartServiceImpl implements CartService {
 
     @Autowired
-    private RedissonClient redissonClient;
+    private RedissonClient redissonClient;//操作 Redis 的客户端
     @Autowired
-    private ProductService productService;
+    private ProductService productService;//拉商品信息（做快照用）
     @Autowired
-    private ObjectMapper objectMapper;
+    private ObjectMapper objectMapper;//JSON ↔ 对象 的转换器
 
     private static final String CART_PREFIX = "ruyi:cart:";
     private static final String GUEST_PREFIX = "ruyi:cart:guest:";
 
+    /**判断用哪个redis key*/
     private String keyfor(Long userId,String guestId){
         return userId != null ? CART_PREFIX + userId : GUEST_PREFIX + guestId;
     }
 
+    /**购物车加购*/
     @Override
     public void addItem(Long userId, String guestId, Long productId, Integer quantity){
 
@@ -55,6 +58,7 @@ public class CartServiceImpl implements CartService {
 
     }
 
+    /**修改购物车商品数量*/
     @Override
     public void updateQuantity(Long userId, String guestId, Long productId, Integer quantity){
         String key = keyfor(userId,guestId);
@@ -66,6 +70,7 @@ public class CartServiceImpl implements CartService {
         cart.put(String.valueOf(productId),serialize(item));
     }
 
+    /**删掉购物车的某一商品*/
     @Override
     public void removeItem(Long userId, String guestId, Long productId){
         String key = keyfor(userId,guestId);
@@ -73,6 +78,7 @@ public class CartServiceImpl implements CartService {
         cart.remove(String.valueOf(productId));
     }
 
+    /**查看购物车（实时算小计）*/
     @Override
     public List<CartItemVO> list(Long userId, String guestId){
         String key = keyfor(userId,guestId);
@@ -86,6 +92,7 @@ public class CartServiceImpl implements CartService {
         return result;
     }
 
+    /**清空购物车*/
     @Override
     public void clear(Long userId,String guestId){
         String key = keyfor(userId,guestId);
@@ -97,6 +104,7 @@ public class CartServiceImpl implements CartService {
         redissonClient.getMap(keyfor(userId,guestId)).delete();
     }
 
+    /**获取商品快照*/
     private CartItemVO loadSnapshot(Long productId){
         Product p = productService.getById(productId);
         if (p == null) {
@@ -111,6 +119,7 @@ public class CartServiceImpl implements CartService {
         return vo;
     }
 
+    /**序列化 对象 → JSON 字符串*/
     private String serialize(CartItemVO v){
         try {
             return objectMapper.writeValueAsString(v);
@@ -119,6 +128,7 @@ public class CartServiceImpl implements CartService {
         }
     }
 
+    /**反序列化 JSON → 对象*/
     private CartItemVO deserialize(String json){
         try {
             return objectMapper.readValue(json, CartItemVO.class);
@@ -127,6 +137,7 @@ public class CartServiceImpl implements CartService {
         }
     }
 
+    /**合并购物车*/
     @Override
     public void mergeGuestToUser(String guestId,Long userId){
         String guestKey = GUEST_PREFIX + guestId;

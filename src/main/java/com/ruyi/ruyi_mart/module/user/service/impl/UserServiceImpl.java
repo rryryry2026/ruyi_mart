@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-//用户模块：账号资料自助管理 + 管理端管人。
+/**用户模块：账号资料自助管理 + 管理端管人。*/
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
@@ -69,11 +69,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setUpdateTime(LocalDateTime.now());
         baseMapper.updateById(user);
 
-        /**
-         * 改完密码必须把 refreshToken 作废。
-         * 否则账号被盗时改了密码也踢不掉对方：他手里那张 refreshToken 还能一直续期，
-         * 等于密码白改（要拖到令牌自然过期为止）。
-         */
+        // 改完密码必须把 refreshToken 作废。
+        // 否则账号被盗时改了密码也踢不掉对方：他手里那张 refreshToken 还能一直续期，
+        // 等于密码白改（要拖到令牌自然过期为止）。
         refreshTokenStore.remove(userId);
     }
 
@@ -159,10 +157,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setUpdateTime(LocalDateTime.now());
         baseMapper.updateById(user);
 
-        /**
-         * 禁用账号时顺手作废 refreshToken：否则对方手上的令牌还能续期，
-         * 要等令牌自然过期才算真的禁用掉。
-         */
+        // 禁用账号时顺手作废 refreshToken：否则对方手上的令牌还能续期，
+        // 要等令牌自然过期才算真的禁用掉。
         if(status == 0){
             refreshTokenStore.remove(userId);
         }

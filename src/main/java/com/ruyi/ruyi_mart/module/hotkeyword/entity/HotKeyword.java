@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
  * 消费端首页搜索栏的滚动热词、搜索页的"热门搜索"标签都用它。
  * 此前首页拿一级分类名顶替、搜索页拿商品名派生，都不是真实的热搜数据。
  */
+/**hot_keyword的镜像。*/
 @Data
 @TableName("hot_keyword")
 public class HotKeyword {

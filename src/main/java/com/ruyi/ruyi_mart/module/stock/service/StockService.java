@@ -4,10 +4,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.module.stock.entity.Stock;
 import com.ruyi.ruyi_mart.module.stock.vo.ProductStockVO;
 
-//商品库存接口，声明方法。
+/**商品库存接口，声明方法。*/
 public interface StockService {
 
-    //初始化/补货商品库存
+    /**初始化/补货商品库存*/
     void initStock(Long productId, Integer total);
 
     /**预扣库存*/

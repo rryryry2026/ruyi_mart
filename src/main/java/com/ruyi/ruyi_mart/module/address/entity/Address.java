@@ -6,7 +6,10 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
-
+/**
+ * 数据库address表在java里的镜像
+ * 表的一行数据<-->一个address对象
+ */
 @Data
 @TableName("address")
 public class Address {

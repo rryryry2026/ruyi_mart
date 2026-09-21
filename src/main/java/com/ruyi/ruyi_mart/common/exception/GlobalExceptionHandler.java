@@ -17,11 +17,13 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /**业务处理异常。*/
     @ExceptionHandler(BusinessException.class)
     public Result<Void> handleBusinessException(BusinessException e){
         return Result.error(e.getCode(), e.getMessage());
     }
 
+    /**参数校验异常。*/
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleValidationException(MethodArgumentNotValidException e){
@@ -31,6 +33,7 @@ public class GlobalExceptionHandler {
         return Result.error(ResultCode.FAIL.getCode(), msg);
     }
 
+    /**兜底异常 对外模糊，对内详细 前端拿到结构一致的json。*/
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleException(Exception e){
@@ -38,6 +41,7 @@ public class GlobalExceptionHandler {
         return Result.error(ResultCode.ERROR);
     }
 
+    /**权限不足异常。*/
     @ExceptionHandler(AccessDeniedException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public Result<Void> handleAccessDeniedExpection(AccessDeniedException e){

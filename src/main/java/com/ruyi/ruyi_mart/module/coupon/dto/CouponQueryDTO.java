@@ -4,7 +4,7 @@ import com.ruyi.ruyi_mart.module.coupon.enums.CouponTypeEnum;
 import lombok.Data;
 
 
-//查询优惠券的入参。
+/**查询优惠券的入参。*/
 @Data
 public class CouponQueryDTO {
 

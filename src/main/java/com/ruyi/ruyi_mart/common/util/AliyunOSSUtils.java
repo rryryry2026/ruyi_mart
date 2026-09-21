@@ -26,7 +26,7 @@ public class AliyunOSSUtils {
     @Autowired
     private AliyunOSSProperties aliyunOSSProperties;
 
-    /** 单文件大小上限。multipart 那层配的 10MB 是容器兜底，这里给业务上更明确的限制 */
+ /**大小上限，multipart 配的 10MB 是容器兜底。*/
     private static final long MAX_SIZE = 5 * 1024 * 1024L;
 
     /**
@@ -34,6 +34,7 @@ public class AliyunOSSUtils {
      * 后缀由校验过的类型决定，不沿用原始文件名里的后缀，
      * 避免把 .jsp / .html 这类文件名带进来。
      */
+    /**类型白名单。*/
     private static final Map<String, String> ALLOWED_TYPES = Map.of(
             "image/jpeg", ".jpg",
             "image/png", ".png",
@@ -42,16 +43,19 @@ public class AliyunOSSUtils {
     );
 
     /** 允许的存放目录，避免调用方随意拼路径 */
+    /**目录白名单。*/
     private static final Set<String> ALLOWED_DIRS = Set.of("review", "product", "banner", "common");
 
     /**
      * OSS 域名的连接超时。
      * SDK 默认约 50 秒，一旦网络抖动人会以为页面卡死，这里压到 10 秒快速失败。
      */
+    /**超时时间设置。*/
     private static final int CONNECT_TIMEOUT_MS = 10 * 1000;
     private static final int SOCKET_TIMEOUT_MS = 15 * 1000;
 
     /** 上传重试次数。OSS 域名对应多个 IP，个别 IP 可能不可达，重试会重新建连并重新解析 */
+    /**重试次数。*/
     private static final int MAX_ATTEMPTS = 2;
 
     /**
@@ -62,19 +66,23 @@ public class AliyunOSSUtils {
     public String upload(MultipartFile file, String dir) {
         // 配置模板里 OSS 密钥是留空的（需用环境变量注入），这里先给出明确提示，
         // 否则只会报一句笼统的"上传失败"，看不出是配置问题
+        //检查配置问题。
         if (!StringUtils.hasText(aliyunOSSProperties.getAccessKeyId())
                 || !StringUtils.hasText(aliyunOSSProperties.getAccessKeySecret())
                 || !StringUtils.hasText(aliyunOSSProperties.getBucketName())) {
             throw new BusinessException(ResultCode.FAIL,
                     "OSS 未配置：请设置环境变量 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET");
         }
+        //检查文件非空。
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ResultCode.FAIL, "上传文件不能为空");
         }
+        //检查文件大小。
         if (file.getSize() > MAX_SIZE) {
             throw new BusinessException(ResultCode.FAIL, "图片不能超过 5MB");
         }
 
+        //类型白名单->确定后缀。
         String extension = ALLOWED_TYPES.get(normalizeContentType(file.getContentType()));
         if (extension == null) {
             throw new BusinessException(ResultCode.FAIL, "只支持 jpg / png / webp / gif 格式的图片");

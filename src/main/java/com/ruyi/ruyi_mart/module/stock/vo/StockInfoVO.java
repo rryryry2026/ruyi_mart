@@ -12,7 +12,7 @@ import lombok.Data;
  * 属于经营数据，定时抓一遍就能推断销量走势。前端商品详情只读 available（"仅剩 N 件"），
  * 所以这里只回这一个字段。
  */
-//用户端库存VO。
+/**用户端库存VO。*/
 @Data
 public class StockInfoVO {
 

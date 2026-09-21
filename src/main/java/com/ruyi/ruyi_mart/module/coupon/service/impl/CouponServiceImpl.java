@@ -24,7 +24,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-//优惠券模板的管理端实现。
+/**优惠券模板的管理端实现。*/
 @Service
 @Slf4j
 public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> implements CouponService {

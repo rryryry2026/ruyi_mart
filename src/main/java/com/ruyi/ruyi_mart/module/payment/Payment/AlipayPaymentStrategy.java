@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
+/**支付宝支付策略。*/
 @Slf4j
 @Component
 public class AlipayPaymentStrategy implements PaymentStrategy{

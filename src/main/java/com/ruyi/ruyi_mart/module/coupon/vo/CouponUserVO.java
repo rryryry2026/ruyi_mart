@@ -8,8 +8,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 
-//我的券包 vo 前端展示。
-//跨表拼接 把 coupon_user + coupon 的字段合成一个。
+/**
+ * 我的券包 vo 前端展示。
+ * 跨表拼接 把 coupon_user + coupon 的字段合成一个。
+ */
 @Data
 public class CouponUserVO {
 
@@ -28,7 +30,7 @@ public class CouponUserVO {
 
     private LocalDateTime createTime;
 
-    // ============ 券模板（展示用） ============
+    /**============ 券模板（展示用） ============*/
     private String activityName;
 
     /** 券类型：fullReduction 满减 / discount 折扣 / noThreshold 无门槛 / item 单品 */

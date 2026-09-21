@@ -8,8 +8,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-//coupon_scope_detail表的镜像。
-//商品使用范围明细表。
+/**
+ * coupon_scope_detail表的镜像。
+ * 商品使用范围明细表。
+ */
 @Data
 @TableName("coupon_scope_detail")
 public class CouponScopeDetail {

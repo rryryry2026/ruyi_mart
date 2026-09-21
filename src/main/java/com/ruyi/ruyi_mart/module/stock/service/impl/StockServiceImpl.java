@@ -25,7 +25,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-//商品库存业务真实实现。
+/**商品库存业务真实实现。*/
 @Slf4j
 @Service
 public class StockServiceImpl implements StockService {
@@ -37,7 +37,7 @@ public class StockServiceImpl implements StockService {
     @Autowired
     private CategoryMapper categoryMapper;//分类表
 
-    //初始化商品库存。
+    /**初始化商品库存。*/
     @Override
     public void initStock(Long productId, Integer total){
         Stock existing = stockMapper.selectById(productId);
@@ -51,20 +51,18 @@ public class StockServiceImpl implements StockService {
             s.setUpdateTime(LocalDateTime.now());
             stockMapper.insert(s);
         } else {
-            /**
-             * 重设总量走单条原子 SQL，不用 updateById。
-             * 原因只有一个：updateById 只能写"Java 里算好的值"，
-             * 表达不了 available + (新总量 - 旧总量) 这种"基于数据库当前值"的增量计算；
-             * 先查出来算好再写回就是读-改-写，并发下会丢更新。
-             * （与乐观锁无关：实体上没有 @Version，项目也没注册
-             *   OptimisticLockerInnerInterceptor，不存在版本号拦截。）
-             */
+            // 重设总量走单条原子 SQL，不用 updateById。
+            // 原因只有一个：updateById 只能写"Java 里算好的值"，
+            // 表达不了 available + (新总量 - 旧总量) 这种"基于数据库当前值"的增量计算；
+            // 先查出来算好再写回就是读-改-写，并发下会丢更新。
+            // （与乐观锁无关：实体上没有 @Version，项目也没注册
+            //   OptimisticLockerInnerInterceptor，不存在版本号拦截。）
             stockMapper.resetTotal(productId, total);
         }
     }
 
 
-    //预扣商品库存。
+    /**预扣商品库存。*/
     @Override
     public boolean tryLock(Long productId,Integer count){
         int rows = stockMapper.preDeduct(productId,count);
@@ -75,7 +73,7 @@ public class StockServiceImpl implements StockService {
         return ok;
     }
 
-    //确认扣减商品库存。
+    /**确认扣减商品库存。*/
     @Override
     public void confirm(Long productId,Integer count){
         if(stockMapper.confirmDeduct(productId,count) == 0){
@@ -86,7 +84,7 @@ public class StockServiceImpl implements StockService {
         }
     }
 
-    //回补商品库存。
+    /**回补商品库存。*/
     @Override
     public void release(Long productId,Integer count){
         if(stockMapper.rollback(productId,count) == 0){
@@ -95,7 +93,7 @@ public class StockServiceImpl implements StockService {
         }
     }
 
-    //退款。
+    /**退款。*/
     @Override
     public void refund(Long productId, Integer count){
         if(stockMapper.refundBack(productId,count) == 0){
@@ -104,13 +102,13 @@ public class StockServiceImpl implements StockService {
         }
     }
 
-    //查看商品库存明细。
+    /**查看商品库存明细。*/
     @Override
     public Stock getByProductId(Long productId){
         return stockMapper.selectById(productId);
     }
 
-    //商品维度库存分页
+    /**商品维度库存分页*/
     @Override
     public Page<ProductStockVO> adminStockPage(String keyword, Long categoryId, int pageNum, int pageSize){
         // 以商品为主表分页，再左连库存——没初始化过库存的商品也能列出来

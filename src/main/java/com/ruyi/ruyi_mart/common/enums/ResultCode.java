@@ -2,6 +2,7 @@ package com.ruyi.ruyi_mart.common.enums;
 
 import lombok.Getter;
 
+/**枚举类型ResultCode 有两个参数：code message 私有构造器构造。*/
 @Getter
 public enum ResultCode {
     SUCCESS(200,"success"),

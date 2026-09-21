@@ -51,7 +51,7 @@ public class ReviewAdminVO {
     private Long replyCount;
 
     /**1=显示 0=隐藏*/
-    private Byte status;
+    private Integer status;
 
     private LocalDateTime createTime;
 }

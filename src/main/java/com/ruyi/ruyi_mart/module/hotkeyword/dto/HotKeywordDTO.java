@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**关键词dto对象*/
 @Data
 public class HotKeywordDTO {
 

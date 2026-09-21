@@ -73,7 +73,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException(ResultCode.NOT_FIND,"购物车为空，无法下单");
         }
 
-        /**收货地址：必填，且必须是本人的地址（否则可以指定别人的地址下单）*/
+        // 收货地址：必填，且必须是本人的地址（否则可以指定别人的地址下单）
         if(dto == null || dto.getAddressId() == null){
             throw new BusinessException(ResultCode.FAIL,"请选择收货地址");
         }
@@ -99,7 +99,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setUserId(userId);
         order.setStatus(0);
         order.setTotalAmount(BigDecimal.ZERO);
-        /**把地址内容复制进订单做快照，之后地址被改被删都不影响这一单*/
+        // 把地址内容复制进订单做快照，之后地址被改被删都不影响这一单
         order.setReceiver(address.getReceiver());
         order.setPhone(address.getPhone());
         order.setProvince(address.getProvince());
@@ -199,7 +199,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException(ResultCode.FAIL, "订单状态异常，无法支付");
         }
 
-        /**只发起支付，返回支付载体（含支付页链接），真正的收款确认交给回调 completePayment*/
+        // 只发起支付，返回支付载体（含支付页链接），真正的收款确认交给回调 completePayment
         PaymentResult result = paymentStrategyHolder.get(payType)
                 .pay(orderId, userId, order.getTotalAmount());
         return result;
@@ -212,7 +212,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         if (order == null) {
             throw new BusinessException(ResultCode.NOT_FIND, "订单不存在");
         }
-        /**幂等：已支付直接返回，避免支付平台重复回调时重复确认库存*/
+        // 幂等：已支付直接返回，避免支付平台重复回调时重复确认库存
         if (order.getStatus() == OrderStatus.PAID.getCode()) {
             return;
         }
@@ -244,7 +244,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         if (!order.getUserId().equals(userId)) {
             throw new BusinessException(ResultCode.FORBIDDEN, "无权操作该订单");
         }
-        /**收款逻辑直接复用回调那一套，避免两处实现日后走偏*/
+        // 收款逻辑直接复用回调那一套，避免两处实现日后走偏
         completePayment(orderId);
     }
 
@@ -262,13 +262,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException(ResultCode.FAIL,"只有待支付订单才能取消");
         }
 
-        /**
-         * 上面那句状态判断只是为了给出准确提示，真正管用的是这句条件更新。
-         * 用户点"取消"的那一瞬间，定时任务可能正好在扫同一笔超时单、
-         * 支付回调也可能同时到达 —— 两边都读到"待支付"就会都去回补库存，
-         * 可用库存凭空多出一份（虚增 → 超卖）。
-         * 抢不到这一行就说明别人已经处理了，直接报错，绝不再碰库存。
-         */
+        // 上面那句状态判断只是为了给出准确提示，真正管用的是这句条件更新。
+        // 用户点"取消"的那一瞬间，定时任务可能正好在扫同一笔超时单、
+        // 支付回调也可能同时到达 —— 两边都读到"待支付"就会都去回补库存，
+        // 可用库存凭空多出一份（虚增 → 超卖）。
+        // 抢不到这一行就说明别人已经处理了，直接报错，绝不再碰库存。
         if(baseMapper.changeStatusIf(orderId, OrderStatus.PENDING.getCode(),
                 OrderStatus.CANCELLED.getCode()) == 0){
             throw new BusinessException(ResultCode.FAIL,"订单状态已变更，请刷新后重试");
@@ -308,7 +306,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
     }
 
-    // ============ 发货  ============
+    /**============ 发货  ============*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public OrderVO shipOrder(Long orderId){
@@ -327,7 +325,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return toVO(baseMapper.selectById(orderId));
     }
 
-    // ============ 确认收货  ============
+    /**============ 确认收货  ============*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public OrderVO confirmReceive(Long userId, Long orderId){

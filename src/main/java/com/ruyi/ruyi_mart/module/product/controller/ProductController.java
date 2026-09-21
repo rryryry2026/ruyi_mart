@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+/**商品业务模块的接口层。*/
 @RestController
 @RequestMapping("/product")
 public class ProductController {
@@ -17,6 +18,7 @@ public class ProductController {
     @Autowired
     private ProductService productService;
 
+    /**添加商品。*/
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public Result<Long> add(@RequestBody Product product){
@@ -24,6 +26,7 @@ public class ProductController {
         return Result.success(product.getId());
     }
 
+    /**修改商品。*/
     @PutMapping
     @PreAuthorize("hasRole('ADMIN')")
     public Result<Void> update(@RequestBody Product product){
@@ -31,6 +34,7 @@ public class ProductController {
         return Result.success();
     }
 
+    /**删除商品。*/
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public Result<Void> delete(@PathVariable Long id){
@@ -38,21 +42,25 @@ public class ProductController {
         return Result.success();
     }
 
+    /**获取单个商品。*/
     @GetMapping("/{id}")
     public Result<Product> getById(@PathVariable Long id){
         return Result.success(productService.getById(id));
     }
 
+    /**获取商品列表。*/
     @GetMapping("/list")
     public Result<?> list(){
         return Result.success(productService.list());
     }
 
+    /**商品分页查询。*/
     @GetMapping("/page")
     public Result<Page<Product>> page(ProductQueryDTO query){
         return Result.success(productService.pageQuery(query));
     }
 
+    /**修改商品状态。*/
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}/status")
     public Result<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status){

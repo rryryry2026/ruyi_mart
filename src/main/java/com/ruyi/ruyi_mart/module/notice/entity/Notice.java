@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
  * 消费端首页有一条滚动公告栏，此前是拿轮播图标题顶替的（后端没有对应表），
  * 这个模块把它补上。
  */
+/**notice表的镜像。*/
 @Data
 @TableName("notice")
 public class Notice {

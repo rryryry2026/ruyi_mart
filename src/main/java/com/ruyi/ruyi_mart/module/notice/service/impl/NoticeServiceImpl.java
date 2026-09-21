@@ -13,16 +13,22 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**公告业务模块的具体实现。*/
 @Service
 public class NoticeServiceImpl extends ServiceImpl<NoticeMapper, Notice> implements NoticeService {
 
     private static final int STATUS_ENABLED = 1;
 
+    /**全部公告列表*/
     @Override
     public List<Notice> listAll() {
-        return lambdaQuery().orderByAsc(Notice::getSort).orderByDesc(Notice::getId).list();
+        return lambdaQuery()
+                .orderByAsc(Notice::getSort)
+                .orderByDesc(Notice::getId)
+                .list();
     }
 
+    /**仅启用的公告。*/
     @Override
     public List<Notice> listEnabled() {
         return lambdaQuery()
@@ -32,6 +38,7 @@ public class NoticeServiceImpl extends ServiceImpl<NoticeMapper, Notice> impleme
                 .list();
     }
 
+    /**添加公告。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addNotice(NoticeDTO dto) {
@@ -45,6 +52,7 @@ public class NoticeServiceImpl extends ServiceImpl<NoticeMapper, Notice> impleme
         save(notice);
     }
 
+    /**修改公告*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateNotice(Long id, NoticeDTO dto) {
@@ -60,6 +68,7 @@ public class NoticeServiceImpl extends ServiceImpl<NoticeMapper, Notice> impleme
         updateById(existing);
     }
 
+    /**删除公告。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteNotice(Long id) {
@@ -68,6 +77,7 @@ public class NoticeServiceImpl extends ServiceImpl<NoticeMapper, Notice> impleme
         }
     }
 
+    /**修改公告状态。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateStatus(Long id, Integer status) {

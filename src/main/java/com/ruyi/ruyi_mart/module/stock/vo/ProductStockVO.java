@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 /**
  * 管理端库存列表视图：商品信息 + 库存明细（无库存记录的商品 stock 字段为 null）
  */
+/**商品库存VO对象。*/
 @Data
 public class ProductStockVO {
 

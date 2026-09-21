@@ -5,6 +5,8 @@ import lombok.Data;
 
 import java.io.Serializable;
 
+
+/**统一响应格式 用静态工厂方法创建。*/
 @Data
 public class Result<T> implements Serializable {
 

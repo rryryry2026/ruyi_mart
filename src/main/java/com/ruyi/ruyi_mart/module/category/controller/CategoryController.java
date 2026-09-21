@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**商品分类业务模块的接口层。*/
 @RestController
 @RequestMapping("/category")
 public class CategoryController {
@@ -16,16 +17,20 @@ public class CategoryController {
     @Autowired
     private CategoryService categoryService;
 
+    /**查商品分类树。*/
     @GetMapping("/tree")
     public Result<List<Category>> getCategoryTree(){
+
         return Result.success(categoryService.getCategoryTree());
     }
 
+    /**查商品某个分类的子分类。*/
     @GetMapping("/children")
     public Result<List<Category>> getCategoryChildren(@RequestParam Long categoryId){
         return  Result.success(categoryService.getCategoryChildren(categoryId));
     }
 
+    /**新增商品分类。*/
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public Result<Void> addCategory(@RequestBody Category category){
@@ -33,6 +38,7 @@ public class CategoryController {
         return Result.success();
     }
 
+    /**删除分类。*/
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public Result<Void> deleteCategory(@PathVariable Long id){
@@ -40,6 +46,7 @@ public class CategoryController {
         return Result.success();
     }
 
+    /**修改分类信息。*/
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public Result<Void> updateCategoryInfo(@PathVariable Long id, @RequestBody Category category){
@@ -47,6 +54,7 @@ public class CategoryController {
         return Result.success();
     }
 
+    /**改分类状态 启用/禁用*/
     @PutMapping("/{id}/status")
     @PreAuthorize("hasRole('ADMIN')")
     public Result<Void> updateCategoryStatus(@PathVariable Long id, @RequestParam Integer status){

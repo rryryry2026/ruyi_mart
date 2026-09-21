@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.util.List;
 
+/**接收前端传来调整轮播图顺序的参数*/
 @Data
 public class BannerSortDTO {
 

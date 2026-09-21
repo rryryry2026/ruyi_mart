@@ -8,7 +8,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-//CouponMutexGroup表的镜像。
+/**CouponMutexGroup表的镜像。*/
 @Data
 @TableName("coupon_mutex_group")
 public class CouponMutexGroup {

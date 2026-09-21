@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
+/**mock支付策略。*/
 @Component
 @Slf4j
 public class MockPaymentStrategy implements PaymentStrategy{

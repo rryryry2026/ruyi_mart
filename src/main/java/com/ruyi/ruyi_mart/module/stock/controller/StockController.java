@@ -8,7 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-//用户端商品库存接口
+/**用户端商品库存接口*/
 @RestController
 @RequestMapping("/stock")
 public class StockController {

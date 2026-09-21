@@ -16,12 +16,9 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.List;
 
-//优惠券的用户端接口
+/**优惠券的用户端接口*/
 @RestController
 @RequestMapping("/coupon")
-
-/**优惠券用户端控制器*/
-
 public class CouponUserController {
 
     @Autowired

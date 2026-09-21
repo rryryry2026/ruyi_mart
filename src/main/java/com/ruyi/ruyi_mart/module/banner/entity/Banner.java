@@ -9,6 +9,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**数据库banner表在java里的镜像。*/
 @Data
 @TableName("banner")
 public class Banner {

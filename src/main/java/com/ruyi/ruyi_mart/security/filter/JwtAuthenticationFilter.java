@@ -19,6 +19,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * jwt过滤器，进入controller之前验token，记身份。
+ * 职责：认人，不是拦人。
+ */
 @Slf4j
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -49,8 +53,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(userId,null,authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
-
                 log.debug("JWT鉴权成功:userId={}, username={}",userId,username);
+
             }catch (Exception e){
                 log.debug("JWT鉴权失败:{}",e.getMessage());
                 SecurityContextHolder.clearContext();
@@ -59,6 +63,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request,response);
     }
 
+    /**去掉bearer 前缀，取出token。*/
     private String resolveToken(HttpServletRequest request){
         String header = request.getHeader(AUTH_HEADER);
         if(StringUtils.hasText(header) && header.startsWith(TOKEN_PREFIX)){

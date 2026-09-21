@@ -6,6 +6,7 @@ import com.ruyi.ruyi_mart.module.notice.entity.Notice;
 
 import java.util.List;
 
+/**公告业务接口，声明方法。*/
 public interface NoticeService extends IService<Notice> {
 
     /** 管理端列表：全部公告，按 sort 升序 */

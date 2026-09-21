@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 
-//用户优惠券的状态枚举。
+/**用户优惠券的状态枚举。*/
 @Getter
 public enum CouponUseStatusEnum {
 

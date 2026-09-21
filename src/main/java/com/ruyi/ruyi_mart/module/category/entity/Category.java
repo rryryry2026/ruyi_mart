@@ -9,9 +9,11 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**category商品分类表的镜像。又是树的节点。*/
 @Data
 @TableName("category")
 public class Category {
+
     @TableId(type = IdType.AUTO)
     private Long id;
     private String name;

@@ -8,12 +8,15 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+/**分类树本地缓存。*/
 @Component
 public class CaffeineUtils {
 
+    /**自带加载能力。*/
     @Resource
     private LoadingCache<String, List<Category>> categoryTreeCache;
 
+    /**拿分类树*/
     public List<Category> getCategoryTree(){
         try {
             return categoryTreeCache.get(CategoryCacheConstant.CACHE_KEY_CATEGORY_TREE);
@@ -22,6 +25,7 @@ public class CaffeineUtils {
         }
     }
 
+    /**清除缓存。*/
     public void invalidateCategoryTree(){
         categoryTreeCache.invalidate(CategoryCacheConstant.CACHE_KEY_CATEGORY_TREE);
     }

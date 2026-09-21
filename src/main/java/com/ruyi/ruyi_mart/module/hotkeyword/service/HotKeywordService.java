@@ -6,6 +6,7 @@ import com.ruyi.ruyi_mart.module.hotkeyword.entity.HotKeyword;
 
 import java.util.List;
 
+/**热搜词业务接口，声明方法。*/
 public interface HotKeywordService extends IService<HotKeyword> {
 
     /** 管理端列表：全部关键词，按 sort 升序 */

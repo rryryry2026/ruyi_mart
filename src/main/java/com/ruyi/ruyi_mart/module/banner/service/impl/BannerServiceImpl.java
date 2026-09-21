@@ -17,14 +17,17 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**轮播图业务的真正实现。*/
 @Service
 public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> implements BannerService {
 
+    /**查全部轮播图。*/
     @Override
     public List<Banner> listAll(){
         return lambdaQuery().orderByAsc(Banner::getSort).list();
     }
 
+    /**查已启用的轮播图。*/
     @Override
     public List<Banner> listEnabled(){
         return lambdaQuery()
@@ -33,6 +36,7 @@ public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> impleme
                 .list();
     }
 
+    /**新增轮播图。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addBanner(BannerDTO dto){
@@ -48,6 +52,7 @@ public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> impleme
         save(banner);
     }
 
+    /**更新轮播图。（局部更新）*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateBanner(Long id, BannerDTO dto){
@@ -65,6 +70,7 @@ public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> impleme
         updateById(existing);
     }
 
+    /**删除轮播图。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteBanner(Long id){
@@ -73,6 +79,7 @@ public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> impleme
         }
     }
 
+    /**轮播图批量排序。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void sortBanners(BannerSortDTO dto){
@@ -87,6 +94,7 @@ public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> impleme
         updateBatchById(banners);
     }
 
+    /**修改轮播图状态。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateStatus(Long id, BannerStatusDTO dto){

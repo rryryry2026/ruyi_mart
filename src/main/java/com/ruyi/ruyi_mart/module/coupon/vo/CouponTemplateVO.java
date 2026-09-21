@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 
-//领券中心列表可领取的券 vo 给前端展示。
+/**领券中心列表可领取的券 vo 给前端展示。*/
 @Data
 public class CouponTemplateVO {
 

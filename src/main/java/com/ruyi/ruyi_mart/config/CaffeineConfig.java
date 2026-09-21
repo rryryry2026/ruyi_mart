@@ -14,13 +14,16 @@ import org.springframework.context.annotation.Lazy;
 
 import java.util.List;
 
+/**创建分类树的caffeine缓存，规定没命中如何加载。*/
 @Configuration
 public class CaffeineConfig {
 
+    /**注入service。*/
     @Lazy
     @Autowired
     private CategoryServiceImpl categoryServiceImpl;
 
+    /**创建并返回LoadingCache Bean 同时装加载函数。*/
     @Bean
     public LoadingCache<String, List<Category>> categoryTreeCache(){
         return Caffeine.<String,List<Category>>newBuilder()

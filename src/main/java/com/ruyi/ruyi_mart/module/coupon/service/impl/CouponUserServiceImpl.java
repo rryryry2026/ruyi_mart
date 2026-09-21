@@ -43,7 +43,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 
-//用户券的实现。
+/**用户券的实现。*/
 @Service
 @Slf4j
 public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponUser> implements CouponUserService {
@@ -73,14 +73,12 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void receiveCoupon(Long userId, CouponReceiveDTO dto){
-        /**
-         * 取模板必须加行锁（不能只用 getById）。
-         * 下面的"单人限领"是"查已领张数 → 插一条"，本身不是原子操作：
-         * 同一个用户并发点 8 次，8 个事务都读到"已领 0 张"，
-         * limit_per_person=1 也能插出 8 条记录（实测 8 个并发请求全部成功）。
-         * 锁住模板行之后，同一张券的领券请求排队执行，这个 count 才可信。
-         * 锁粒度只到"同一张券"，不同券互不影响，也不会和下面的原子计数互相等锁。
-         */
+        // 取模板必须加行锁（不能只用 getById）。
+        // 下面的"单人限领"是"查已领张数 → 插一条"，本身不是原子操作：
+        // 同一个用户并发点 8 次，8 个事务都读到"已领 0 张"，
+        // limit_per_person=1 也能插出 8 条记录（实测 8 个并发请求全部成功）。
+        // 锁住模板行之后，同一张券的领券请求排队执行，这个 count 才可信。
+        // 锁粒度只到"同一张券"，不同券互不影响，也不会和下面的原子计数互相等锁。
         Coupon coupon = couponMapper.selectByIdForUpdate(dto.getCouponId());
         if(coupon == null){
             throw new BusinessException(ResultCode.NOT_FIND, "优惠券不存在");
@@ -101,13 +99,11 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             throw new BusinessException(ResultCode.FAIL, "与已持有券互斥，不可同时领取");
         }
 
-        /**
-         * 先原子占用一份额度再落库。
-         * 不能"先查 receiveQuota 够不够、再 +1 写回"——那是读-改-写，
-         * 并发下会把最后一张券同时发给两个人（@Transactional 救不了：
-         * 两个事务各自都成功了，没有半成品可回滚）。
-         * 影响 0 行说明额度已被别人抢走。
-         */
+        // 先原子占用一份额度再落库。
+        // 不能"先查 receiveQuota 够不够、再 +1 写回"——那是读-改-写，
+        // 并发下会把最后一张券同时发给两个人（@Transactional 救不了：
+        // 两个事务各自都成功了，没有半成品可回滚）。
+        // 影响 0 行说明额度已被别人抢走。
         if (couponMapper.occupyReceiveQuota(coupon.getId()) == 0) {
             throw new BusinessException(ResultCode.FAIL, "优惠券已领完");
         }
@@ -159,7 +155,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         return false;
     }
 
-    //我的券包。
+    /**我的券包。*/
     @Override
     public IPage<CouponUserVO> myCoupons(Long userId, Integer useStatus, Integer page, Integer size) {
         Page<CouponUser> p = new Page<>(page == null ? 1 : page, size == null ? 10 : size);
@@ -179,7 +175,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         return voPage;
     }
 
-    //结算可用券。
+    /**结算可用券。*/
     @Override
     public List<CouponUserVO> listAvailable(Long userId, BigDecimal orderAmount) {
         LocalDateTime now = LocalDateTime.now();
@@ -207,7 +203,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         return result;
     }
 
-    //领券中心。
+    /**领券中心。*/
     @Override
     public List<CouponTemplateVO> listReceivable(Long userId) {
         // 发放中、且未被隐藏的券模板
@@ -286,7 +282,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
                 .collect(Collectors.toMap(Coupon::getId, c -> c, (a, b) -> a));
     }
 
-    //拼vo对象。
+    /**拼vo对象。*/
     private CouponUserVO toUserVO(CouponUser cu, Coupon coupon, BigDecimal discountAmount) {
         CouponUserVO vo = new CouponUserVO();
         vo.setId(cu.getId());
@@ -308,7 +304,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         return vo;
     }
 
-    //核销券。
+    /**核销券。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BigDecimal useCoupon(Long userId, CouponUseDTO dto) {
@@ -323,16 +319,14 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             throw new BusinessException(ResultCode.FAIL, "该券不可使用");
         }
 
-        /**
-         * orderAmount 必填。
-         * 缺了它就没法判断满减券的门槛——calcDiscount 会对 null 走"按面值兜底"，
-         * 等于"满800减100"直接减100，门槛形同虚设。
-         */
+        // orderAmount 必填。
+        // 缺了它就没法判断满减券的门槛——calcDiscount 会对 null 走"按面值兜底"，
+        // 等于"满800减100"直接减100，门槛形同虚设。
         if (dto.getOrderAmount() == null) {
             throw new BusinessException(ResultCode.FAIL, "缺少订单金额，无法计算优惠");
         }
 
-        /** 订单必须存在且属于本人，否则会往别人的订单上写券关联（退款时会连带回滚） */
+        // 订单必须存在且属于本人，否则会往别人的订单上写券关联（退款时会连带回滚）
         Order order = orderMapper.selectById(dto.getOrderId());
         if (order == null) {
             throw new BusinessException(ResultCode.NOT_FIND, "订单不存在");
@@ -365,11 +359,9 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             throw new BusinessException(ResultCode.FAIL, "该优惠券不满足使用条件或抵扣金额为0");
         }
 
-        /**
-         * 条件更新：只有仍处于"未用"才能改成"已用"。
-         * 原先是无条件 updateById，用户手抖双击或并发请求会让同一张券被核销两次
-         * （写两条 coupon_order_rel、抵扣两次），事务挡不住这种情况。
-         */
+        // 条件更新：只有仍处于"未用"才能改成"已用"。
+        // 原先是无条件 updateById，用户手抖双击或并发请求会让同一张券被核销两次
+        // （写两条 coupon_order_rel、抵扣两次），事务挡不住这种情况。
         if (baseMapper.changeStatusIf(userCoupon.getId(),
                 CouponUseStatusEnum.UNUSED.getCode(),
                 CouponUseStatusEnum.USED.getCode()) == 0) {
@@ -451,7 +443,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         return false;
     }
 
-    //退款回滚。
+    /**退款回滚。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void refundRollback(Long userCouponId) {
@@ -460,11 +452,9 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             return;
         }
 
-        /**
-         * 只有"已用"的券才回滚，靠条件更新的影响行数判定。
-         * 原先是无条件置成"已退回"，退款流程若被重复调用，
-         * used_quota 会被多减一次（Math.max 只兜住下限，兜不住重复减）。
-         */
+        // 只有"已用"的券才回滚，靠条件更新的影响行数判定。
+        // 原先是无条件置成"已退回"，退款流程若被重复调用，
+        // used_quota 会被多减一次（Math.max 只兜住下限，兜不住重复减）。
         int changed = baseMapper.changeStatusIf(userCouponId,
                 CouponUseStatusEnum.USED.getCode(),
                 CouponUseStatusEnum.RETURNED.getCode());
@@ -486,7 +476,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         }
     }
 
-    //定期扫描。
+    /**定期扫描。*/
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void scanExpired() {
@@ -504,7 +494,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         }
     }
 
-    //算钱。
+    /**算钱。*/
     private BigDecimal calcDiscount(Coupon coupon, BigDecimal orderAmount) {
         CouponTypeEnum type = coupon.getCouponType();
 

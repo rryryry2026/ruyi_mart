@@ -4,6 +4,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+/**阿里云oss存储配置。*/
 @Component
 @ConfigurationProperties(prefix = "app.aliyun.oss")
 @Data

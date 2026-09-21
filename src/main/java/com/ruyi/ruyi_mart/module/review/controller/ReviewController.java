@@ -30,28 +30,28 @@ public class ReviewController {
         return null;
     }
 
-    // ============ 1. 发表一级评论（首评） ============
+    /**============ 1. 发表一级评论（首评） ============*/
     @PostMapping("/first")
     public Result<Long> saveFirstComment(@Valid @RequestBody FirstProductCommentDTO dto){
         Long id = productCommentService.saveProductFirstComment(currentUserId(),dto);
         return Result.success(id);
     }
 
-    // ============ 2. 发表二级回复 ============
+    /**============ 2. 发表二级回复 ============*/
     @PostMapping("/second")
     public Result<Long> saveSecondComment(@Valid @RequestBody SecondProductCommentDTO dto){
         Long id = productCommentService.saveProductSecondComment(currentUserId(),dto);
         return Result.success(id);
     }
 
-    // ============ 3. 追评 ============
+    /**============ 3. 追评 ============*/
     @PostMapping("/first/append")
     public Result<Void> appendFirstComment(@Valid @RequestBody AppendProductFirstCommentDTO dto){
         productCommentService.appendProductFirstComment(currentUserId(),dto);
         return Result.success();
     }
 
-    // ============ 4. 按商品查一级评论（分页 + 排序） ============
+    /**============ 4. 按商品查一级评论（分页 + 排序） ============*/
     @GetMapping("/first/page")
     public Result<Page<ProductFirstCommentVO>> firstCommentPage(
             @RequestParam Long productId,
@@ -63,7 +63,7 @@ public class ReviewController {
         return Result.success(page);
     }
 
-    // ============ 5. 查某一级评论下的二级回复（分页） ============
+    /**============ 5. 查某一级评论下的二级回复（分页） ============*/
     @GetMapping("/second/page")
     public Result<Page<ProductSecondCommentVO>> secondCommentPage(
             @RequestParam Long firstCommentId,
@@ -74,19 +74,19 @@ public class ReviewController {
         return Result.success(page);
     }
 
-    // ============ 6. 查某一级评论的追评（一对一） ============
+    /**============ 6. 查某一级评论的追评（一对一） ============*/
     @GetMapping("/append")
     public Result<ProductAppendCommentVO> appendComment(@RequestParam Long firstCommentId){
         return Result.success(productCommentService.getAppendComment(firstCommentId));
     }
 
-    // ============ 7. 统计某商品评论总数 ============
+    /**============ 7. 统计某商品评论总数 ============*/
     @GetMapping("/count")
     public Result<Long> commentCount(@RequestParam Long productId){
         return Result.success(productCommentService.getProductCommentCount(productId));
     }
 
-    // ============ 8. 点赞 / 取消点赞 ============
+    /**============ 8. 点赞 / 取消点赞 ============*/
     @PutMapping("/like")
     public Result<Void> like(@RequestParam Long commentId, @RequestParam Integer isLike){
         productCommentService.updateProductCommentLike(currentUserId(),commentId,isLike);

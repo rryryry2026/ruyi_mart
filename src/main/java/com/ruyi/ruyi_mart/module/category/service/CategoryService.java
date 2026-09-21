@@ -5,6 +5,7 @@ import com.ruyi.ruyi_mart.module.category.entity.Category;
 
 import java.util.List;
 
+/**商品分类模块的业务接口，声明方法。*/
 public interface CategoryService extends IService<Category> {
 
     /** 获取完整分类树*/

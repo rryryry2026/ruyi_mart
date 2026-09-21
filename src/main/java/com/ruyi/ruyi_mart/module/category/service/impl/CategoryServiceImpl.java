@@ -19,6 +19,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     @Resource
     private CaffeineUtils caffeineUtils;
 
+    /**从数据库中查已启用的分类，组装成树。*/
     public List<Category> getCategoryTreeCache(){
         List<Category> all = lambdaQuery()
                 .eq(Category::getStatus,1)
@@ -33,11 +34,13 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         return  roots;
     }
 
+    /**委托，获取分类树。（缓存发生的地方）*/
     @Override
     public List<Category> getCategoryTree(){
         return caffeineUtils.getCategoryTree();
     }
 
+    /**把分类按parentId组装成树。（递归）*/
     private void buildTree(List<Category> all,List<Category> parents){
         if(parents == null || parents.isEmpty()){
             return;
@@ -53,6 +56,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         buildTree(all,nextLevel);
     }
 
+    /**获取商品某分类下的子分类。*/
     @Override
     public List<Category> getCategoryChildren(Long categoryId){
         return lambdaQuery()

@@ -9,13 +9,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-//优惠券的管理端接口。
+/**优惠券的管理端接口。*/
 @RestController
 @RequestMapping("/admin/coupon")
 @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-
-/**优惠券管理端控制器*/
-
 public class CouponAdminController {
 
     @Autowired

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+/**图片上传的工具类。*/
 @RestController
 @RequestMapping("/api")
 @Tag(name = "工具")
@@ -32,11 +33,17 @@ public class ToolController {
      *
      * @param dir 存放目录，仅允许 review / product / banner / common
      */
+    /**
+     * 上传图片到oss，返回访问的url。
+     * 文件参数靠类型自动识别，普通参数靠注解显示声明。
+     */
     @PostMapping("/upload/image")
     @Operation(summary = "图片上传")
     public Result<String> upload(MultipartFile file,
                                  @RequestParam(required = false, defaultValue = "common") String dir) {
-        log.info("图片上传: dir={}, name={}, size={}", dir, file == null ? null : file.getOriginalFilename(),
+        //用{}占位符，真要输出时才做替换。避免白创建临时对象，不输出日志时不浪费运算。
+        log.info("图片上传: dir={}, name={}, size={}", dir,
+                file == null ? null : file.getOriginalFilename(),
                 file == null ? 0 : file.getSize());
         return Result.success(aliyunOSSUtils.upload(file, dir));
     }

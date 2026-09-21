@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 
-//优惠券类型枚举。
+/**优惠券类型枚举。*/
 @Getter
 public enum CouponTypeEnum {
 

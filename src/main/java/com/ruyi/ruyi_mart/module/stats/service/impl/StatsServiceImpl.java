@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-//返回工作台六个指标。
+/**返回工作台六个指标。*/
 @Service
 public class StatsServiceImpl implements StatsService {
 

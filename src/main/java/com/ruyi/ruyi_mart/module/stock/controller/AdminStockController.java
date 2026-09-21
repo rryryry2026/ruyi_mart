@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 管理端库存接口：商品维度的库存列表（现有 /stock/info 只能按单个商品查询）
  */
+/**管理端商品库存接口。*/
 @RestController
 @RequestMapping("/admin/stock")
 @PreAuthorize("hasRole('ADMIN')")

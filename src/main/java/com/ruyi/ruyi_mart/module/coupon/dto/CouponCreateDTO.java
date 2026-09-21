@@ -12,7 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 
-//创建优惠券的入参。
+/**创建优惠券的入参。*/
 @Data
 public class CouponCreateDTO {
 

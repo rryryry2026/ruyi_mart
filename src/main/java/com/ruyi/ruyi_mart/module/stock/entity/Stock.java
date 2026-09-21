@@ -7,7 +7,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-//商品库存 stock 表的镜像。一个商品一条记录。
+/**商品库存 stock 表的镜像。一个商品一条记录。*/
 @Data
 @TableName("stock")
 public class Stock {

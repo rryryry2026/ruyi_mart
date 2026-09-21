@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 
+/**购物车的条目在java里的镜像，对应redis里的。*/
 @Data
 public class CartItemVO {
 

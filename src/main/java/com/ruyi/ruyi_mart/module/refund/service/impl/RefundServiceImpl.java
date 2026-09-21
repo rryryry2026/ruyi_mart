@@ -116,14 +116,12 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
         if(refund == null){
             throw new BusinessException(ResultCode.NOT_FIND, "退款单不存在");
         }
-        /**
-         * 先抢状态流转，再动植物。
-         * 原来是"查出来看状态 → 退库存 → 回滚券 → 最后 updateById"，
-         * 那是读-改-写：两个管理员同时点"同意"都会读到"待审核"、双双通过检查，
-         * 结果库存回补两次、订单退款两次。抢不到就说明已经被审过了。
-         * 优惠券那边还有一层幂等兜底（refundRollback 只认"已用→已退回"），
-         * 但库存没有，必须在入口拦住。
-         */
+        // 先抢状态流转，再动植物。
+        // 原来是"查出来看状态 → 退库存 → 回滚券 → 最后 updateById"，
+        // 那是读-改-写：两个管理员同时点"同意"都会读到"待审核"、双双通过检查，
+        // 结果库存回补两次、订单退款两次。抢不到就说明已经被审过了。
+        // 优惠券那边还有一层幂等兜底（refundRollback 只认"已用→已退回"），
+        // 但库存没有，必须在入口拦住。
         if(baseMapper.changeStatusIf(refundId, RefundStatus.PENDING.getCode(),
                 RefundStatus.REFUNDED.getCode()) == 0){
             throw new BusinessException(ResultCode.FAIL, "只有待审核的退款单才能审核");
@@ -149,7 +147,7 @@ public class RefundServiceImpl extends ServiceImpl<RefundMapper, Refund> impleme
         updOrder.setUpdateTime(LocalDateTime.now());
         orderMapper.updateById(updOrder);
 
-        /**状态已由上面的条件更新落库，这里只同步内存对象供返回值使用*/
+        // 状态已由上面的条件更新落库，这里只同步内存对象供返回值使用
         refund.setStatus(RefundStatus.REFUNDED.getCode());
         refund.setUpdateTime(LocalDateTime.now());
         return refund;
