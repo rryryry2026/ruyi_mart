@@ -1,5 +1,6 @@
 package com.ruyi.ruyi_mart.module.product.controller;
 
+import jakarta.validation.Valid;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ruyi.ruyi_mart.common.result.Result;
 import com.ruyi.ruyi_mart.module.product.dto.ProductQueryDTO;
@@ -21,7 +22,7 @@ public class ProductController {
     /**添加商品。*/
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<Long> add(@RequestBody Product product){
+    public Result<Long> add(@Valid @RequestBody Product product){
         productService.save(product);
         return Result.success(product.getId());
     }
@@ -29,7 +30,7 @@ public class ProductController {
     /**修改商品。*/
     @PutMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<Void> update(@RequestBody Product product){
+    public Result<Void> update(@Valid @RequestBody Product product){
         productService.updateById(product);
         return Result.success();
     }

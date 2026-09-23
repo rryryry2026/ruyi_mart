@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ruyi.ruyi_mart.common.enums.ResultCode;
 import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.coupon.dto.CouponReceiveDTO;
@@ -207,7 +208,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             // 互斥不再限制领取：可以同时持有同组的多张券，只是不能在同一笔订单上叠加使用
             int remainToReceive = (int) Math.max(0, limit - owned);
             if (remainToReceive <= 0) {
-                
+                continue; // 已达单人领取上限，列表里不展示
             }
 
             CouponTemplateVO vo = new CouponTemplateVO();
@@ -329,28 +330,18 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         }
 
         /**
-         * 互斥的语义是"不能在同一笔订单里叠加使用"，不是"不能同时持有"。
-         * 领取时不设限制：用户完全可以拿两张不同档的券用在不同订单上；
-         * 但同一笔订单不能同时用两张同互斥组的券（否则"满减券+折扣券不可叠加"这类规则形同虚设）。
-         * 订单行上面已经加锁，所以这里查到的"本单已有的券"是可信的。
+         * 一笔订单只能用一张券。
+         * 独立接口 POST /coupon/use 可以绕过下单流程直接调用，这里不拦的话同一笔订单能被核销两张券：
+         * 两张券都变成"已使用"、used_quota 各加一次，而订单金额只减了一张券的钱 ——
+         * 券被白白消耗，退款回滚也会乱。（互斥组现在只用于"同组券不能叠加"这一层语义，
+         * 而"一单一张"已经把叠加问题一并覆盖。）
+         * 订单行上面已加锁，所以这里的判断不会被并发绕过。
          */
-        if (coupon.getMutexGroupCode() != null && coupon.getMutexGroupCode() != 0) {
-            List<CouponOrderRel> usedInOrder = couponOrderRelMapper.selectList(
-                    new LambdaQueryWrapper<CouponOrderRel>()
-                            .eq(CouponOrderRel::getOrderId, order.getId())
-                            .eq(CouponOrderRel::getRelStatus, 1));
-            if (!usedInOrder.isEmpty()) {
-                List<Long> usedUserCouponIds = new ArrayList<>();
-                for (CouponOrderRel rel : usedInOrder) {
-                    usedUserCouponIds.add(rel.getUserCouponId());
-                }
-                for (CouponUser used : listByIds(usedUserCouponIds)) {
-                    Coupon usedCoupon = couponService.getById(used.getCouponId());
-                    if (usedCoupon != null && coupon.getMutexGroupCode().equals(usedCoupon.getMutexGroupCode())) {
-                        throw new BusinessException(ResultCode.FAIL, "本单已使用同组的优惠券，不可叠加使用");
-                    }
-                }
-            }
+        boolean orderHasCoupon = !couponOrderRelMapper.selectList(new LambdaQueryWrapper<CouponOrderRel>()
+                .eq(CouponOrderRel::getOrderId, order.getId())
+                .eq(CouponOrderRel::getRelStatus, 1)).isEmpty();
+        if (orderHasCoupon) {
+            throw new BusinessException(ResultCode.FAIL, "本单已使用过优惠券，一张订单只能用一张");
         }
         if (!isInScope(coupon, dto, order)) {
             throw new BusinessException(ResultCode.FAIL, "该券不适用于本单商品");
@@ -442,6 +433,44 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             }
         }
         return false;
+    }
+
+    /**
+     * 订单取消 / 超时关闭时的券回滚。
+     *
+     * 未支付的订单没有成交，下单时核销掉的券必须原路退回可用状态 ——
+     * 不能直接复用 refundRollback：那个退成 RETURNED（已退回），
+     * 而 useCoupon 只接受 UNUSED，退成 RETURNED 的券永远用不了，等于没退。
+     * 已过期的券不用在这里特判，useCoupon 的有效期校验会自然拒掉。
+     * 只在订单状态被抢到之后调用（和库存回补同一个道理），否则取消和超时任务会各退一次。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void orderCancelRollback(Long orderId){
+        List<CouponOrderRel> rels = couponOrderRelMapper.selectList(
+                new LambdaQueryWrapper<CouponOrderRel>()
+                        .eq(CouponOrderRel::getOrderId, orderId)
+                        .eq(CouponOrderRel::getRelStatus, 1));   // 1=有效关联
+        for (CouponOrderRel rel : rels) {
+            // 券状态用条件更新：只有"已使用"才能回到"未使用"，退过一次就不会再退
+            if (baseMapper.changeStatusIf(rel.getUserCouponId(),
+                    CouponUseStatusEnum.USED.getCode(),
+                    CouponUseStatusEnum.UNUSED.getCode()) > 0) {
+                CouponUser userCoupon = getById(rel.getUserCouponId());
+                if (userCoupon != null) {
+                    couponMapper.decreaseUsedQuota(userCoupon.getCouponId());
+                }
+            }
+            // 关联记录置为无效，退款流程就不会再看到它（refundRollback 只认 rel_status=1）
+            couponOrderRelMapper.update(null, new LambdaUpdateWrapper<CouponOrderRel>()
+                    .eq(CouponOrderRel::getId, rel.getId())
+                    .set(CouponOrderRel::getRelStatus, 2)
+                    // refund_time 在这里复用为"关联失效时间"：取消/关单也要留下这个动作的时间戳（表里没有更合适的列）
+                    .set(CouponOrderRel::getRefundTime, LocalDateTime.now()));
+        }
+        if (!rels.isEmpty()) {
+            log.info("订单 {} 取消/关闭，回滚优惠券 {} 张", orderId, rels.size());
+        }
     }
 
     /**退款回滚。*/

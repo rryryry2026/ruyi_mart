@@ -93,6 +93,13 @@ public class SecurityConfig {
                         .requestMatchers("/payment/mock/confirm", "/payment/alipay/notify", "/payment/wechat/notify").permitAll()
                         // Swagger / API 文档
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/error").permitAll()
+                        /**
+                         * 管理端接口的路径级兜底：即使将来新增的 admin Controller 忘了加 @PreAuthorize，
+                         * 请求也会在这里被拦下（默认拒绝）。
+                         * 与业务代码里"CAS + 影响行数判定"同一个思想：不依赖某一处的自觉，用机制兜住。
+                         */
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+
                         //其余全部要登录。
                         .anyRequest().authenticated()
                 )
@@ -104,6 +111,13 @@ public class SecurityConfig {
                                     response.setStatus(401);
                                     response.setContentType("application/json;charset=UTF-8");
                                     response.getWriter().write("{\"code\":401,\"message\":\"未认证，请先登录\"}");
+                                })
+                                // 403 也要统一响应体：过滤器层（比如 /admin/** 的路径规则）被拒时，
+                                // 走的是 Spring Security 自己的处理器，@RestControllerAdvice 捕获不到
+                                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                                    response.setStatus(403);
+                                    response.setContentType("application/json;charset=UTF-8");
+                                    response.getWriter().write("{\"code\":403,\"message\":\"无权限访问\"}");
                                 })
                         );
 

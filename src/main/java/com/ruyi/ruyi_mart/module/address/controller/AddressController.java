@@ -1,5 +1,6 @@
 package com.ruyi.ruyi_mart.module.address.controller;
 
+import jakarta.validation.Valid;
 import com.ruyi.ruyi_mart.common.result.Result;
 import com.ruyi.ruyi_mart.module.address.entity.Address;
 import com.ruyi.ruyi_mart.module.address.service.AddressService;
@@ -39,14 +40,14 @@ public class AddressController {
 
     /**新增地址。*/
     @PostMapping("/add")
-    public Result<Void> add(@RequestBody Address address){
+    public Result<Void> add(@Valid @RequestBody Address address){
         addressService.insertAddress(address,currentUserId());
         return Result.success();
     }
 
     /**修改地址。*/
     @PutMapping("/update")
-    public Result<Void> update(@RequestBody Address address){
+    public Result<Void> update(@Valid @RequestBody Address address){
         addressService.updateAddress(address,currentUserId());
         return Result.success();
     }

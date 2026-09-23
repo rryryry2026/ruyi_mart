@@ -300,6 +300,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException(ResultCode.FAIL,"订单状态已变更，请刷新后重试");
         }
         releaseStock(orderId);
+        // 券也要回滚：这笔订单没成交（未支付），下单时核销掉的券必须原路退回可用状态
+        couponUserService.orderCancelRollback(orderId);
 
         return getOrderDetail(userId,orderId);
     }
@@ -317,6 +319,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             return false;
         }
         releaseStock(orderId);
+        // 券也要回滚：这笔订单没成交（未支付），下单时核销掉的券必须原路退回可用状态
+        couponUserService.orderCancelRollback(orderId);
         log.info("订单 {} 已关闭，回补锁定库存", orderId);
         return true;
     }
@@ -420,15 +424,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             qw.le(Order::getCreateTime, dto.getEndTime().atTime(LocalTime.MAX));
         }
         if(StringUtils.hasText(dto.getKeyword())){
-            // 先按买家用户名/昵称解析出用户ID集合，再过滤订单，保证分页总数正确
-            List<Long> userIds = userMapper.selectList(new LambdaQueryWrapper<User>()
-                            .like(User::getUsername, dto.getKeyword())
-                            .or().like(User::getNickname, dto.getKeyword()))
-                    .stream().map(User::getId).collect(Collectors.toList());
-            if(userIds.isEmpty()){
-                return new Page<>(dto.getPageNum(), dto.getPageSize());
-            }
-            qw.in(Order::getUserId, userIds);
+            // 买家关键字直接下推给数据库过滤：原来是"先 like 查出全部命中用户再 IN(userIds)"，
+            // 用户量大时会把命中用户整批捞进应用内存，只为了拿一串 id。
+            // 用 apply 的 {0} 占位符（MyBatis-Plus 会转成预编译参数）而不是拼字符串，避免注入。
+            qw.apply("user_id IN (SELECT id FROM user WHERE username LIKE CONCAT('%', {0}, '%') "
+                    + "OR nickname LIKE CONCAT('%', {0}, '%'))", dto.getKeyword());
         }
         qw.orderByDesc(Order::getCreateTime);
         baseMapper.selectPage(page, qw);

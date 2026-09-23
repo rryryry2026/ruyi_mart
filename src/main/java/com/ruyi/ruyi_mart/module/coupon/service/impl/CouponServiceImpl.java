@@ -14,6 +14,7 @@ import com.ruyi.ruyi_mart.module.coupon.entity.CouponUser;
 import com.ruyi.ruyi_mart.module.coupon.enums.CouponTypeEnum;
 import com.ruyi.ruyi_mart.module.coupon.enums.CouponValidModeEnum;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponMapper;
+import com.ruyi.ruyi_mart.module.coupon.mapper.CouponMutexGroupMapper;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponUserMapper;
 import com.ruyi.ruyi_mart.module.coupon.service.CouponService;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,8 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
 
     @Autowired
     private CouponUserMapper couponUserMapper;
+    @Autowired
+    private CouponMutexGroupMapper couponMutexGroupMapper;
 
     /**管理端分页列表*/
     @Override
@@ -139,7 +142,14 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
         coupon.setLimitPerPerson(dto.getLimitPerPerson() == null ? 1 : dto.getLimitPerPerson());
         coupon.setUserLimitType(dto.getUserLimitType() == null ? 1 : dto.getUserLimitType());
         coupon.setUseScope(dto.getUseScope() == null ? 1 : dto.getUseScope());
-        coupon.setMutexGroupCode(dto.getMutexGroupCode() == null ? 0L : dto.getMutexGroupCode());
+        Long mutexGroupCode = dto.getMutexGroupCode() == null ? 0L : dto.getMutexGroupCode();
+        coupon.setMutexGroupCode(mutexGroupCode);
+        // 互斥组得先有一行配置，核销时才好在库里按组判断"同组不能叠加"；
+        // 管理端目前没有单独的互斥组维护页，所以在这里按需补一条，组名先自动生成，
+        // 将来要做正式的"互斥组管理"页面时，再补改名/删除入口即可。
+        if(mutexGroupCode != 0){
+            couponMutexGroupMapper.insertIfAbsent(mutexGroupCode, "互斥组-" + mutexGroupCode);
+        }
     }
 
     /**

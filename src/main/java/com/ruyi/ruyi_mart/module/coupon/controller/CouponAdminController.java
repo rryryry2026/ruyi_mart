@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 /**优惠券的管理端接口。*/
 @RestController
 @RequestMapping("/admin/coupon")
-@PreAuthorize("hasAuthority('ROLE_ADMIN')")
+@PreAuthorize("hasRole('ADMIN')")
 public class CouponAdminController {
 
     @Autowired

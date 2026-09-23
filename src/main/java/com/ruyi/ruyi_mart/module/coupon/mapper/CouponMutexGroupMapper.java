@@ -2,21 +2,24 @@ package com.ruyi.ruyi_mart.module.coupon.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ruyi.ruyi_mart.module.coupon.entity.CouponMutexGroup;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 
+/**
+ * 互斥组 Mapper。
+ *
+ * 互斥组是一份"配置数据"：券上存 mutex_group_code，核销时靠它判断"同组券不能叠加使用"。
+ * 目前没有独立的管理端页面，所以建/改券时按需自动建档（见 CouponServiceImpl）。
+ */
 @Mapper
 public interface CouponMutexGroupMapper extends BaseMapper<CouponMutexGroup> {
 
     /**
-     * 按互斥组编码加行锁（领互斥券时用）。
-     *
-     * 互斥是"跨券"的规则：领取时只锁住待领的那张券模板行是不够的 ——
-     * 同一用户并发领两张互斥券时，两个事务各锁各的券行、各自的互斥检查
-     * 都看不见对方还没提交的那条领取记录，结果两张互斥券都领到了。
-     * 所以额外把互斥组那一行锁住，让同组的领券请求排队。
+     * 互斥组不存在时补一条。
+     * 用 INSERT IGNORE：group_code 上有唯一索引，并发建券时后到的那条被忽略，不会报错。
      */
-    @Select("SELECT id FROM coupon_mutex_group WHERE group_code = #{groupCode} FOR UPDATE")
-    Long lockByGroupCode(@Param("groupCode") Long groupCode);
+    @Insert("INSERT IGNORE INTO coupon_mutex_group (group_code, group_name, create_time) " +
+            "VALUES (#{groupCode}, #{groupName}, NOW())")
+    int insertIfAbsent(@Param("groupCode") Long groupCode, @Param("groupName") String groupName);
 }

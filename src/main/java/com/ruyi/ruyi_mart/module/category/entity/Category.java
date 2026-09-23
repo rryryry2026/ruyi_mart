@@ -1,5 +1,6 @@
 package com.ruyi.ruyi_mart.module.category.entity;
 
+import jakarta.validation.constraints.NotBlank;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -16,6 +17,8 @@ public class Category {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    /**分类名称（必填）*/
+    @NotBlank(message = "分类名称不能为空")
     private String name;
     private Long parentId;
     private String iconUrl;

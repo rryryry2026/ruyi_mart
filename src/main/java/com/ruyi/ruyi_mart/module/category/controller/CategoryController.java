@@ -1,5 +1,6 @@
 package com.ruyi.ruyi_mart.module.category.controller;
 
+import jakarta.validation.Valid;
 import com.ruyi.ruyi_mart.common.result.Result;
 import com.ruyi.ruyi_mart.module.category.entity.Category;
 import com.ruyi.ruyi_mart.module.category.service.CategoryService;
@@ -33,7 +34,7 @@ public class CategoryController {
     /**新增商品分类。*/
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<Void> addCategory(@RequestBody Category category){
+    public Result<Void> addCategory(@Valid @RequestBody Category category){
         categoryService.addCategory(category);
         return Result.success();
     }
@@ -49,7 +50,7 @@ public class CategoryController {
     /**修改分类信息。*/
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<Void> updateCategoryInfo(@PathVariable Long id, @RequestBody Category category){
+    public Result<Void> updateCategoryInfo(@PathVariable Long id, @Valid @RequestBody Category category){
         categoryService.updateCategoryInfo(id, category);
         return Result.success();
     }

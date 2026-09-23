@@ -37,7 +37,7 @@ public class CouponUserController {
         return Result.success();
     }
 
-    /**领券中心：当前用户还能领的券（服务端已按领取上限、库存、互斥组预筛）*/
+    /**领券中心：当前用户还能领的券（服务端已按领取上限、库存预筛）*/
     @GetMapping("/receivable")
     public Result<List<CouponTemplateVO>> receivable() {
         return Result.success(couponUserService.listReceivable(currentUserId()));

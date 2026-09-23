@@ -27,7 +27,7 @@ public interface CouponUserService extends IService<CouponUser> {
      */
     List<CouponUserVO> listAvailable(Long userId, BigDecimal orderAmount);
 
-    /**领券中心：当前用户还能领取的券模板（已按领取上限、库存、互斥组预筛过）*/
+    /**领券中心：当前用户还能领取的券模板（已按领取上限、库存预筛过）*/
     List<CouponTemplateVO> listReceivable(Long userId);
 
     /**核销（结算用券，返回本次抵扣金额）*/
@@ -35,6 +35,13 @@ public interface CouponUserService extends IService<CouponUser> {
 
     /**退款回滚（订单退款时调用，恢复券与额度）*/
     void refundRollback(Long userCouponId);
+
+    /**
+     * 订单取消 / 超时关闭时的券回滚：未支付的订单没有成交，
+     * 下单时核销掉的券要原路退回成"未使用"，用户还能继续用。
+     * 必须在订单状态被抢到之后再调用（与库存回补同一个道理）。
+     */
+    void orderCancelRollback(Long orderId);
 
     /**过期扫描（@Scheduled 定时任务调用，把过期未用券置为 EXPIRED）*/
     void scanExpired();
