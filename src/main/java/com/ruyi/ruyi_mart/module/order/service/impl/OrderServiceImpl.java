@@ -115,11 +115,22 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             }
         }
 
+        /**
+         * 先把订单原价算出来，随订单一起落库。
+         * 必须在下单之前算好：下面的用券要按"订单金额"判断满减门槛、算抵扣金额，
+         * 而 useCoupon 是从订单表读金额的 —— 如果插入时还写占位的 0，
+         * 带券下单会直接报"订单金额异常，无法使用优惠券"。
+         */
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        for(CartItemVO ci : cartItems){
+            totalAmount = totalAmount.add(ci.getPrice().multiply(BigDecimal.valueOf(ci.getQuantity())));
+        }
+
         Order order = new Order();
         order.setOrderNo(generateOrderNo());
         order.setUserId(userId);
         order.setStatus(OrderStatus.PENDING.getCode());
-        order.setTotalAmount(BigDecimal.ZERO);
+        order.setTotalAmount(totalAmount);
         // 把地址内容复制进订单做快照，之后地址被改被删都不影响这一单
         order.setReceiver(address.getReceiver());
         order.setPhone(address.getPhone());
@@ -131,14 +142,12 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setUpdateTime(LocalDateTime.now());
         baseMapper.insert(order);
 
-        BigDecimal totalAmount = BigDecimal.ZERO;
         List<OrderItem> itemList = new ArrayList<>();
         for(CartItemVO ci : cartItems){
             Long productId = ci.getProductId();
             Integer quantity = ci.getQuantity();
 
             BigDecimal subtotal = ci.getPrice().multiply(BigDecimal.valueOf(quantity));
-            totalAmount = totalAmount.add(subtotal);
 
             OrderItem item = new OrderItem();
             item.setOrderId(order.getId());
@@ -155,7 +164,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             CouponUseDTO useDTO = new CouponUseDTO();
             useDTO.setUserCouponId(dto.getUserCouponId());
             useDTO.setOrderId(order.getId());
-            useDTO.setOrderAmount(totalAmount); // 用订单原价计算真实折扣
             couponDiscount = couponUserService.useCoupon(userId, useDTO);
         }
         totalAmount = totalAmount.subtract(couponDiscount);

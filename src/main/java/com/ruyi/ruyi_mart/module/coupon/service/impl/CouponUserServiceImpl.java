@@ -17,7 +17,6 @@ import com.ruyi.ruyi_mart.module.coupon.enums.CouponTypeEnum;
 import com.ruyi.ruyi_mart.module.coupon.enums.CouponUseStatusEnum;
 import com.ruyi.ruyi_mart.module.coupon.enums.CouponValidModeEnum;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponMapper;
-import com.ruyi.ruyi_mart.module.coupon.mapper.CouponMutexGroupMapper;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponOrderRelMapper;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponScopeDetailMapper;
 import com.ruyi.ruyi_mart.module.coupon.mapper.CouponUserMapper;
@@ -39,7 +38,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -63,8 +61,6 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     private CouponMapper couponMapper;
     @Autowired
     private CouponScopeDetailMapper couponScopeDetailMapper;
-    @Autowired
-    private CouponMutexGroupMapper couponMutexGroupMapper;
     @Autowired
     private CouponOrderRelMapper couponOrderRelMapper;
     @Autowired
@@ -92,26 +88,12 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             throw new BusinessException(ResultCode.FAIL, "优惠券不在发放中");
         }
 
-        /**
-         * 互斥是跨券的规则，只锁住本券这一行不够：
-         * 同一用户并发领两张互斥券时，两个事务各锁各的券行，
-         * 各自的互斥检查都看不到对方还没提交的那条领取记录，结果两张都领到了。
-         * 这里再把互斥组那一行也锁住，让同组的领券请求排队执行。
-         */
-        if(coupon.getMutexGroupCode() != null && coupon.getMutexGroupCode() != 0){
-            couponMutexGroupMapper.lockByGroupCode(coupon.getMutexGroupCode());
-        }
-
         long owned = count(new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getUserId, userId)
                 .eq(CouponUser::getCouponId, coupon.getId()));
         int limit = coupon.getLimitPerPerson() == null ? 1 : coupon.getLimitPerPerson();
         if (owned >= limit) {
             throw new BusinessException(ResultCode.FAIL, "已达到单人领取上限");
-        }
-
-        if (isBlockedByMutex(userId, coupon)) {
-            throw new BusinessException(ResultCode.FAIL, "与已持有券互斥，不可同时领取");
         }
 
         // 先原子占用一份额度再落库。
@@ -142,52 +124,6 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         userCoupon.setCreateTime(now);
         userCoupon.setUpdateTime(now);
         save(userCoupon);
-    }
-
-    /**
-     * 我持有的券涉及哪些互斥组。
-     * 领券中心的列表循环要逐个模板判断互斥，而 isBlockedByMutex 每次都会全量查一遍我的券 ——
-     * 所以先把"我持有的互斥组"算一次，循环里只做集合判断。
-     */
-    private Set<Long> myMutexGroupCodes(List<CouponUser> mine){
-        Set<Long> codes = new HashSet<>();
-        if(mine.isEmpty()){
-            return codes;
-        }
-        Map<Long, Coupon> couponMap = loadCouponMap(mine);
-        for(CouponUser cu : mine){
-            Coupon held = couponMap.get(cu.getCouponId());
-            if(held != null && held.getMutexGroupCode() != null && held.getMutexGroupCode() != 0){
-                codes.add(held.getMutexGroupCode());
-            }
-        }
-        return codes;
-    }
-
-    /**
-     * 是否被互斥组挡住。
-     * 领券时的校验和领券中心的预筛都调它，避免同一套规则写两份、
-     * 将来改了一处忘了另一处（就会出现"列表里显示能领、点下去报错"）。
-     */
-    private boolean isBlockedByMutex(Long userId, Coupon coupon){
-        Long groupCode = coupon.getMutexGroupCode();
-        if (groupCode == null || groupCode == 0) {
-            return false;
-        }
-        List<CouponUser> mine = list(new LambdaQueryWrapper<CouponUser>()
-                .eq(CouponUser::getUserId, userId));
-        if (mine.isEmpty()) {
-            return false;
-        }
-        // 批量取模板（loadCouponMap 就是为了避免逐条查）
-        Map<Long, Coupon> couponMap = loadCouponMap(mine);
-        for (CouponUser cu : mine) {
-            Coupon held = couponMap.get(cu.getCouponId());
-            if (held != null && groupCode.equals(held.getMutexGroupCode())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**我的券包。*/
@@ -256,9 +192,6 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         Map<Long, Long> ownedCountMap = mine.stream()
                 .collect(Collectors.groupingBy(CouponUser::getCouponId, Collectors.counting()));
 
-        // 循环外先算一次"我持有的互斥组"，循环里只做集合判断，避免逐个模板全量查我的券
-        Set<Long> myMutexGroups = myMutexGroupCodes(mine);
-
         List<CouponTemplateVO> result = new ArrayList<>();
         for (Coupon coupon : templates) {
             int total = coupon.getTotalQuota() == null ? 0 : coupon.getTotalQuota();
@@ -271,15 +204,10 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             long owned = ownedCountMap.getOrDefault(coupon.getId(), 0L);
             int limit = coupon.getLimitPerPerson() == null ? 1 : coupon.getLimitPerPerson();
 
-            // 互斥判断用循环外一次性算好的集合：isBlockedByMutex 每次调用都要全量查我的券，
-            // 放在循环里会被每个券模板各触发一次（N 张模板 = N 次全量查询）
-            boolean blockedByMutex = coupon.getMutexGroupCode() != null
-                    && coupon.getMutexGroupCode() != 0
-                    && myMutexGroups.contains(coupon.getMutexGroupCode());
-
-            int remainToReceive = blockedByMutex ? 0 : (int) Math.max(0, limit - owned);
+            // 互斥不再限制领取：可以同时持有同组的多张券，只是不能在同一笔订单上叠加使用
+            int remainToReceive = (int) Math.max(0, limit - owned);
             if (remainToReceive <= 0) {
-                continue; // 已达单人上限 / 被互斥挡住
+                
             }
 
             CouponTemplateVO vo = new CouponTemplateVO();
@@ -363,7 +291,8 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         // 金额不取客户端传的 orderAmount，改成从订单里读（见下面加载订单之后）
 
         // 订单必须存在且属于本人，否则会往别人的订单上写券关联（退款时会连带回滚）
-        Order order = orderMapper.selectById(dto.getOrderId());
+        // 加锁读订单：下面的"本单是否已用过同组券"是查完再插入，不串行化会被并发绕过
+        Order order = orderMapper.selectByIdForUpdate(dto.getOrderId());
         if (order == null) {
             throw new BusinessException(ResultCode.NOT_FIND, "订单不存在");
         }
@@ -397,6 +326,31 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         Coupon coupon = couponService.getById(userCoupon.getCouponId());
         if (coupon == null) {
             throw new BusinessException(ResultCode.NOT_FIND, "优惠券模板不存在");
+        }
+
+        /**
+         * 互斥的语义是"不能在同一笔订单里叠加使用"，不是"不能同时持有"。
+         * 领取时不设限制：用户完全可以拿两张不同档的券用在不同订单上；
+         * 但同一笔订单不能同时用两张同互斥组的券（否则"满减券+折扣券不可叠加"这类规则形同虚设）。
+         * 订单行上面已经加锁，所以这里查到的"本单已有的券"是可信的。
+         */
+        if (coupon.getMutexGroupCode() != null && coupon.getMutexGroupCode() != 0) {
+            List<CouponOrderRel> usedInOrder = couponOrderRelMapper.selectList(
+                    new LambdaQueryWrapper<CouponOrderRel>()
+                            .eq(CouponOrderRel::getOrderId, order.getId())
+                            .eq(CouponOrderRel::getRelStatus, 1));
+            if (!usedInOrder.isEmpty()) {
+                List<Long> usedUserCouponIds = new ArrayList<>();
+                for (CouponOrderRel rel : usedInOrder) {
+                    usedUserCouponIds.add(rel.getUserCouponId());
+                }
+                for (CouponUser used : listByIds(usedUserCouponIds)) {
+                    Coupon usedCoupon = couponService.getById(used.getCouponId());
+                    if (usedCoupon != null && coupon.getMutexGroupCode().equals(usedCoupon.getMutexGroupCode())) {
+                        throw new BusinessException(ResultCode.FAIL, "本单已使用同组的优惠券，不可叠加使用");
+                    }
+                }
+            }
         }
         if (!isInScope(coupon, dto, order)) {
             throw new BusinessException(ResultCode.FAIL, "该券不适用于本单商品");
