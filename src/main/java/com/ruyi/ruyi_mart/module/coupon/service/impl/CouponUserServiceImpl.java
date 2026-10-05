@@ -58,6 +58,9 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     /** coupon_scope_detail.scope_type：2 按分类 */
     private static final int SCOPE_TYPE_CATEGORY = 2;
 
+    /**分页每页条数上限*/
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Autowired
     private CouponService couponService;
     @Autowired
@@ -132,7 +135,10 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     /**我的券包。*/
     @Override
     public IPage<CouponUserVO> myCoupons(Long userId, Integer useStatus, Integer page, Integer size) {
-        Page<CouponUser> p = new Page<>(page == null ? 1 : page, size == null ? 10 : size);
+        // pageSize 夹进上限，与管理端分页同规则
+        int pageNum = Math.max(page == null ? 1 : page, 1);
+        int pageSize = Math.min(Math.max(size == null ? 10 : size, 1), MAX_PAGE_SIZE);
+        Page<CouponUser> p = new Page<>(pageNum, pageSize);
         IPage<CouponUser> entityPage = page(p, new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getUserId, userId)
                 .eq(useStatus != null, CouponUser::getUseStatus, useStatus)

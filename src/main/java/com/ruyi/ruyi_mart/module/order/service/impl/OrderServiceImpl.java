@@ -399,6 +399,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     public Page<OrderVO> listOrdersPage(Long userId,Integer status,int pageNum,int pageSize){
+        // pageSize 夹进上限：消费端与管理端同规则，超大值会把整表捞进内存
+        pageNum = Math.max(pageNum, 1);
+        pageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
         Page<Order> page = new Page<>(pageNum,pageSize);
         LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
         qw.eq(Order::getUserId,userId);
