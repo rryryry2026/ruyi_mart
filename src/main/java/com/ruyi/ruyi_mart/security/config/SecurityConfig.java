@@ -2,6 +2,7 @@ package com.ruyi.ruyi_mart.security.config;
 
 import org.springframework.http.HttpMethod;
 import com.ruyi.ruyi_mart.security.filter.JwtAuthenticationFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -75,6 +76,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         //免登录。
                         .requestMatchers("/user/login", "/user/register", "/user/refresh").permitAll()
+                        //管理端写接口的路径级兜底（这些路径不在 /admin/** 之下，
+                        //且所在 Controller 的方法上虽有 @PreAuthorize，但多一层路径规则兜住
+                        //"方法注解被删/失效"的情况；写在对应 permitAll 段之前，先匹配先生效）：
+                        .requestMatchers(HttpMethod.POST, "/stock/init").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/order/ship/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/refund/approve/*", "/refund/reject/*").hasRole("ADMIN")
                         //游客可浏览的开放接口。
                         .requestMatchers("/banner/**").permitAll()
                         .requestMatchers("/category/**").permitAll()
@@ -122,5 +129,19 @@ public class SecurityConfig {
                         );
 
         return http.build();
+    }
+
+    /**
+     * 关闭这个过滤器在 Servlet 容器层的注册。
+     * 它既是 @Component Bean（Boot 会自动把 Filter 类型的 Bean 再注册一份到容器层），
+     * 又在上面 addFilterBefore 挂进了安全链——同一实例出现在两条链上。
+     * OncePerRequestFilter 的去重能保证逻辑不会执行两次，但"只留在安全链里"才是本意，
+     * 显式关掉容器层那份，避免将来有人依赖了这个巧合的执行顺序。
+     */
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration(JwtAuthenticationFilter filter){
+        FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 }

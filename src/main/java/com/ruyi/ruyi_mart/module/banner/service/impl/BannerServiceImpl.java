@@ -24,7 +24,7 @@ public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> impleme
     /**查全部轮播图。*/
     @Override
     public List<Banner> listAll(){
-        return lambdaQuery().orderByAsc(Banner::getSort).list();
+        return lambdaQuery().orderByAsc(Banner::getSort).orderByAsc(Banner::getId).list();
     }
 
     /**查已启用的轮播图。*/
@@ -33,6 +33,7 @@ public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> impleme
         return lambdaQuery()
                 .eq(Banner::getStatus, BannerStatus.ACTIVE)
                 .orderByAsc(Banner::getSort)
+                .orderByAsc(Banner::getId)
                 .list();
     }
 
@@ -40,6 +41,10 @@ public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> impleme
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addBanner(BannerDTO dto){
+        // imageUrl 必填校验从 DTO 挪到这里：列是 NOT NULL，且只有新建这一条路径必须传
+        if(dto.getImageUrl() == null || dto.getImageUrl().isBlank()){
+            throw new BusinessException(ResultCode.FAIL, "图片URL不能为空");
+        }
         Banner banner = new Banner();
         banner.setTitle(dto.getTitle());
         banner.setImageUrl(dto.getImageUrl());
@@ -84,6 +89,12 @@ public class BannerServiceImpl extends ServiceImpl<BannerMapper, Banner> impleme
     @Transactional(rollbackFor = Exception.class)
     public void sortBanners(BannerSortDTO dto){
         List<Long> ids = dto.getIds();
+        // 校验所有 id 都存在：updateBatchById 对不存在的 id 静默跳过，
+        // 前端会以为排序成功了，实际序列里少了几张图
+        long existing = this.lambdaQuery().in(Banner::getId, ids).count();
+        if(existing != ids.size()){
+            throw new BusinessException(ResultCode.NOT_FIND, "存在无效的轮播图ID，排序失败");
+        }
         List<Banner> banners = new ArrayList<>(ids.size());
         for(int i = 0;i < ids.size();i++){
             Banner b = new Banner();

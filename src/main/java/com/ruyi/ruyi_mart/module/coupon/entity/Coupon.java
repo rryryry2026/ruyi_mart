@@ -40,7 +40,7 @@ public class Coupon {
     @TableField("discount_rate")
     private BigDecimal discountRate;
 
-    /**折扣上限*/
+    /**折扣上限。0 或 null 表示不设上限（核销时据此判断是否截断抵扣额）*/
     @TableField("max_discount")
     private BigDecimal maxDiscount;
 

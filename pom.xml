@@ -178,8 +178,6 @@
         </dependency>
 
 
-        <!-- M2 商品检索：Elasticsearch 相关依赖已移除（代码里没有实现，留着只会在面试里被追问"怎么用的"） -->
-
 
         <dependency>
             <groupId>org.apache.rocketmq</groupId>
@@ -213,6 +211,9 @@
                     <source>17</source>
                     <target>17</target>
                     <encoding>UTF-8</encoding>
+                    <!-- 把方法参数名写进 class 文件：操作日志脱敏靠参数名识别敏感字段，
+                         缺了它参数名全是 arg0，脱敏会静默失效 -->
+                    <parameters>true</parameters>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>

@@ -29,6 +29,9 @@ public class CaffeineConfig {
         return Caffeine.<String,List<Category>>newBuilder()
                 .initialCapacity(1)
                 .maximumSize(1)
+                // 必须有 TTL：某个写路径漏调 invalidate 时，脏数据只活 10 分钟，
+                // 而不是一直脏到应用重启。写路径正常时到期重载也只是一次 DB 查询
+                .expireAfterWrite(java.time.Duration.ofMinutes(10))
                 .build(new CacheLoader<String,List<Category>>() {
                     @Override
                     public List<Category> load(String key) throws Exception{

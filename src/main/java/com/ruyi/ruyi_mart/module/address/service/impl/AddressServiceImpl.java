@@ -31,7 +31,7 @@ public class AddressServiceImpl extends ServiceImpl<AddressMapper,Address> imple
     public void insertAddress(Address address, Long userId){
         address.setUserId(userId);
         if(address.getIsDefault() != null && address.getIsDefault() == 1){
-            clearOtherDefault(userId);
+            clearOtherDefault(userId, null);
         }
         save(address);
     }
@@ -49,7 +49,7 @@ public class AddressServiceImpl extends ServiceImpl<AddressMapper,Address> imple
         }
         address.setUserId(userId);
         if(address.getIsDefault() != null && address.getIsDefault() == 1){
-            clearOtherDefault(userId);
+            clearOtherDefault(userId, address.getId());
         }
         updateById(address);
     }
@@ -68,9 +68,13 @@ public class AddressServiceImpl extends ServiceImpl<AddressMapper,Address> imple
     }
 
     /**清除其他默认地址。*/
-    private void clearOtherDefault(Long userId){
+    private void clearOtherDefault(Long userId, Long excludeAddressId){
+        // 只动"当前是默认"的行、并排除本次要设默认的地址本身：
+        // 原来把该用户所有地址整批刷一遍，非默认地址的 update_time 也被无意义地刷新
         lambdaUpdate()
                 .eq(Address::getUserId,userId)
+                .eq(Address::getIsDefault,1)
+                .ne(excludeAddressId != null, Address::getId, excludeAddressId)
                 .set(Address::getIsDefault,0)
                 .update();
     }

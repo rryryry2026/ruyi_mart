@@ -1,7 +1,6 @@
 package com.ruyi.ruyi_mart.module.coupon.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -27,6 +26,7 @@ import com.ruyi.ruyi_mart.module.coupon.vo.CouponTemplateVO;
 import com.ruyi.ruyi_mart.module.coupon.vo.CouponUserVO;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
 import com.ruyi.ruyi_mart.module.order.entity.OrderItem;
+import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderItemMapper;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
 import com.ruyi.ruyi_mart.module.product.entity.Product;
@@ -55,6 +55,8 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
 
     /** coupon_scope_detail.scope_type：1 按商品、2 按分类 */
     private static final int SCOPE_TYPE_PRODUCT = 1;
+    /** coupon_scope_detail.scope_type：2 按分类 */
+    private static final int SCOPE_TYPE_CATEGORY = 2;
 
     @Autowired
     private CouponService couponService;
@@ -134,7 +136,9 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         IPage<CouponUser> entityPage = page(p, new LambdaQueryWrapper<CouponUser>()
                 .eq(CouponUser::getUserId, userId)
                 .eq(useStatus != null, CouponUser::getUseStatus, useStatus)
-                .orderByDesc(CouponUser::getCreateTime));
+                // 只按 createTime 排序时同秒记录顺序不稳、翻页可能重复或丢，加 id 作第二排序键
+                .orderByDesc(CouponUser::getCreateTime)
+                .orderByDesc(CouponUser::getId));
 
         // 批量取券模板，避免逐条查（N+1）
         Map<Long, Coupon> couponMap = loadCouponMap(entityPage.getRecords());
@@ -180,7 +184,7 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
     public List<CouponTemplateVO> listReceivable(Long userId) {
         // 发放中、且未被隐藏的券模板
         List<Coupon> templates = couponService.list(new LambdaQueryWrapper<Coupon>()
-                .eq(Coupon::getStatus, 1)
+                .eq(Coupon::getStatus, COUPON_STATUS_RELEASING)
                 .eq(Coupon::getIsElimination, 0)
                 .orderByDesc(Coupon::getCreateTime));
         if (templates.isEmpty()) {
@@ -300,6 +304,11 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         if (!order.getUserId().equals(userId)) {
             throw new BusinessException(ResultCode.FORBIDDEN, "无权在该订单上使用优惠券");
         }
+        // 只有待支付订单才能核销券：券在下单那一刻随订单一起生效，
+        // 对已支付/已关闭的订单核销不会改变任何金额，只是白白烧掉一张券
+        if(order.getStatus() == null || order.getStatus() != OrderStatus.PENDING.getCode()){
+            throw new BusinessException(ResultCode.FAIL, "只有待支付订单才能使用优惠券");
+        }
 
         /**
          * 抵扣金额一律以订单为准，不采信客户端传的 orderAmount。
@@ -393,40 +402,56 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
             return false;
         }
 
+        // 本单明细一次查完、涉及的商品再一次查完：
+        // 原来每条明细各自 selectById 商品，一单 N 个商品就是 N+1 次查询
+        List<OrderItem> items = orderItemMapper.selectList(
+                new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, order.getId()));
+        Map<Long, Product> productMap = loadProductMap(items);
+
         // 单品券：只认调用方指定的那一项订单明细
         if (dto.getOrderItemId() != null && dto.getOrderItemId() != 0) {
             OrderItem item = orderItemMapper.selectById(dto.getOrderItemId());
             if (item != null && item.getOrderId().equals(order.getId())) {
-                return scopeHits(scopes, item.getProductId());
+                return scopeHits(scopes, item.getProductId(), productMap.get(item.getProductId()));
             }
         }
         // 未指定明细（或明细不属于本单）：只要本单里有商品命中范围即可
-        List<OrderItem> items = orderItemMapper.selectList(
-                new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, order.getId()));
         for (OrderItem item : items) {
-            if (scopeHits(scopes, item.getProductId())) {
+            if (scopeHits(scopes, item.getProductId(), productMap.get(item.getProductId()))) {
                 return true;
             }
         }
         return false;
     }
 
+    /**批量取一批订单明细涉及的商品，避免逐个 selectById*/
+    private Map<Long, Product> loadProductMap(List<OrderItem> items){
+        Set<Long> productIds = items.stream()
+                .map(OrderItem::getProductId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+        return productMapper.selectBatchIds(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, p -> p, (a, b) -> a));
+    }
+
     /** 商品是否落在券的适用范围内：直接命中商品，或命中商品所属分类 */
-    private boolean scopeHits(List<CouponScopeDetail> scopes, Long productId){
+    private boolean scopeHits(List<CouponScopeDetail> scopes, Long productId, Product product){
         if (productId == null) {
             return false;
         }
-        Long categoryId = null;
-        Product product = productMapper.selectById(productId);
-        if (product != null) {
-            categoryId = product.getCategoryId();
-        }
+        Long categoryId = product == null ? null : product.getCategoryId();
         for (CouponScopeDetail scope : scopes) {
-            boolean hitProduct = scope.getScopeType() != null
-                    && scope.getScopeType() == SCOPE_TYPE_PRODUCT
+            if (scope.getScopeType() == null) {
+                continue;
+            }
+            // 按 scope_type 的字面值判断，不用"不等于商品型就算分类型"：
+            // 将来加第三种范围类型时，它不该被误当成分类命中
+            boolean hitProduct = scope.getScopeType() == SCOPE_TYPE_PRODUCT
                     && productId.equals(scope.getTargetId());
-            boolean hitCategory = scope.getScopeType() != null
-                    && scope.getScopeType() != SCOPE_TYPE_PRODUCT
+            boolean hitCategory = scope.getScopeType() == SCOPE_TYPE_CATEGORY
                     && categoryId != null && categoryId.equals(scope.getTargetId());
             if (hitProduct || hitCategory) {
                 return true;
@@ -500,9 +525,11 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
                 .eq(CouponOrderRel::getUserCouponId, userCouponId)
                 .eq(CouponOrderRel::getRelStatus, 1));
         for (CouponOrderRel rel : rels) {
-            rel.setRelStatus(2);
-            rel.setRefundTime(LocalDateTime.now());
-            couponOrderRelMapper.updateById(rel);
+            // 只更新需要的两列，不整行写回：updateById 会把查出来的快照原样写回，覆盖并发改过的列
+            couponOrderRelMapper.update(null, new LambdaUpdateWrapper<CouponOrderRel>()
+                    .eq(CouponOrderRel::getId, rel.getId())
+                    .set(CouponOrderRel::getRelStatus, 2)
+                    .set(CouponOrderRel::getRefundTime, LocalDateTime.now()));
         }
     }
 
@@ -557,6 +584,12 @@ public class CouponUserServiceImpl extends ServiceImpl<CouponUserMapper, CouponU
         }
 
         if (type == CouponTypeEnum.DISCOUNT) {
+            // 折扣券同样有使用门槛：满减分支查了 minSpend，这里却漏了——
+            // 配"满 800 可用 88 折"的券，10 元订单也能打折
+            BigDecimal minSpend = coupon.getMinSpend() == null ? BigDecimal.ZERO : coupon.getMinSpend();
+            if (orderAmount.compareTo(minSpend) < 0) {
+                return BigDecimal.ZERO;
+            }
             BigDecimal rate = coupon.getDiscountRate() == null ? BigDecimal.TEN : coupon.getDiscountRate();
             BigDecimal percent = rate.divide(BigDecimal.TEN, 4, java.math.RoundingMode.HALF_UP);
             BigDecimal discount = orderAmount.multiply(BigDecimal.ONE.subtract(percent));

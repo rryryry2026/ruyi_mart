@@ -29,6 +29,9 @@ public class StatsServiceImpl implements StatsService {
     /**低库存阈值：可用库存 ≤ 该值视为预警*/
     private static final int LOW_STOCK_THRESHOLD = 5;
 
+    /**业务时区：工作台"今日"口径固定按中国时区算，不跟随部署机的 JVM 时区*/
+    private static final java.time.ZoneId BUSINESS_ZONE = java.time.ZoneId.of("Asia/Shanghai");
+
     @Autowired
     private OrderMapper orderMapper;
     @Autowired
@@ -49,7 +52,9 @@ public class StatsServiceImpl implements StatsService {
     @Transactional(readOnly = true)
     public StatsSummaryVO summary() {
         StatsSummaryVO vo = new StatsSummaryVO();
-        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        // "今日"固定按业务所在时区（中国）算：LocalDate.now() 依赖 JVM 时区，
+        // 服务器若跑在 UTC，零点会差 8 小时，"今日订单数"就对不上
+        LocalDateTime todayStart = LocalDate.now(BUSINESS_ZONE).atStartOfDay();
 
         //今日订单数（含未支付）
         vo.setTodayOrderCount(orderMapper.selectCount(new LambdaQueryWrapper<Order>()

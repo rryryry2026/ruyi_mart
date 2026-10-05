@@ -1,7 +1,6 @@
 package com.ruyi.ruyi_mart.module.banner.dto;
 
 import com.ruyi.ruyi_mart.module.banner.enums.BannerStatus;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**接收前端传来的轮播图参数。*/
@@ -11,8 +10,7 @@ public class BannerDTO {
     /** 轮播图标题（可选） */
     private String title;
 
-    /** 图片URL（必填,对应表 image_url NOT NULL） */
-    @NotBlank(message = "图片URL不能为空")
+    /** 图片URL（新建时必填，改用服务端校验——DTO 上加 @NotBlank 会把"局部更新"逼成整体更新） */
     private String imageUrl;
 
     /** 跳转链接（可选） */

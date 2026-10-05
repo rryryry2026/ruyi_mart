@@ -1,13 +1,12 @@
 package com.ruyi.ruyi_mart.module.refund.controller;
 
 import com.ruyi.ruyi_mart.common.result.Result;
+import com.ruyi.ruyi_mart.common.util.SecurityUtils;
 import com.ruyi.ruyi_mart.module.log.annotation.OpLog;
 import com.ruyi.ruyi_mart.module.refund.entity.Refund;
 import com.ruyi.ruyi_mart.module.refund.service.RefundService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,8 +19,7 @@ public class RefundController {
     private RefundService refundService;
 
     private Long currentUserId(){
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        return (Long) authentication.getPrincipal();
+        return SecurityUtils.currentUserId();
     }
 
     @PostMapping("/apply")

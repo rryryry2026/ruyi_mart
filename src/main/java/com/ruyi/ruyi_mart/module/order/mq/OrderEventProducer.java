@@ -23,6 +23,9 @@ public class OrderEventProducer {
         Message<String> msg = MessageBuilder.withPayload(String.valueOf(orderId))
                 .setHeader(RocketMQHeaders.KEYS, String.valueOf(orderId))
                 .build();
-        rocketMQTemplate.syncSend(ORDER_CLOSE_TOPIC, msg, 3000, closeDelayLevel);
+        // 同步发送的超时压到 1 秒：它是下单链路里的一段阻塞调用，
+        // MQ 抖动时不能让用户等 3 秒。发送失败由调用方 catch 后走定时任务兜底关单，
+        // 所以这里"快失败"比"重试到成功"更合适
+        rocketMQTemplate.syncSend(ORDER_CLOSE_TOPIC, msg, 1000, closeDelayLevel);
     }
 }

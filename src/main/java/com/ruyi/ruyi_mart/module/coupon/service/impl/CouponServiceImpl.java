@@ -1,7 +1,6 @@
 package com.ruyi.ruyi_mart.module.coupon.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -34,6 +33,9 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
     /** 模板状态：1 发放中 */
     private static final int STATUS_RELEASING = 1;
 
+    /**分页每页条数上限*/
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Autowired
     private CouponUserMapper couponUserMapper;
     @Autowired
@@ -42,9 +44,9 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
     /**管理端分页列表*/
     @Override
     public IPage<Coupon> listCoupons(CouponQueryDTO dto){
-        // 前端可能传空串（转成 null），这里兜底，避免拆箱 NPE
-        int pageNum = dto.getPage() == null ? 1 : dto.getPage();
-        int pageSize = dto.getSize() == null ? 10 : dto.getSize();
+        // 前端可能传空串（转成 null），这里兜底，避免拆箱 NPE；pageSize 夹进上限，防超大值拖库
+        int pageNum = Math.max(dto.getPage() == null ? 1 : dto.getPage(), 1);
+        int pageSize = Math.min(Math.max(dto.getSize() == null ? 10 : dto.getSize(), 1), MAX_PAGE_SIZE);
         Page<Coupon> page = new Page<>(pageNum, pageSize);
         return page(page, new LambdaQueryWrapper<Coupon>()
                 .like(StringUtils.hasText(dto.getActivityName()),Coupon::getActivityName,dto.getActivityName())
@@ -113,8 +115,10 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
     /**管理端启停 / 改模板状态*/
     @Override
     public void updateStatus(Long id, Integer status) {
-        if (status == null) {
-            throw new BusinessException(ResultCode.FAIL, "状态不能为空");
+        // 只接受模板状态字典里定义的值：放任意数字进去会让券"静默消失"——
+        // 领券中心只认 1(发放中)，一个 status=99 的券谁也看不见、又删不掉
+        if (status == null || status < 0 || status > 3) {
+            throw new BusinessException(ResultCode.FAIL, "状态取值只能为 0未开始/1发放中/2已结束/3作废");
         }
         boolean updated = lambdaUpdate()
                 .eq(Coupon::getId, id)
@@ -190,7 +194,8 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
         }
         if (mode == CouponValidModeEnum.FIXED_TIME) {
             if (coupon.getValidStart() == null || coupon.getValidEnd() == null) {
-                // 少了这两个时间，领取人的券会 "永不过期"（核销时的判空分支会直接放行）
+                // 少了这两个时间，领取人的券就没有有效期约束；核销侧对有效期缺失的券是
+                // 直接拒用的，两边口径一致，所以建券时必须先拦住
                 throw new BusinessException(ResultCode.FAIL, "固定时间模式必须同时填写起止时间");
             }
             if (!coupon.getValidStart().isBefore(coupon.getValidEnd())) {

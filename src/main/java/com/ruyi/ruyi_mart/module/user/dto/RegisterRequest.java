@@ -16,6 +16,7 @@ public class RegisterRequest {
     @Size(min = 6,max = 32,message = "密码长度必须在 6-32 之间")
     private String password;
 
+    @Size(max = 20,message = "昵称最长20个字符")
     private String nickname;
 
     @Pattern(regexp = "^1[3-9]\\d{9}$",message = "手机号格式不正确")

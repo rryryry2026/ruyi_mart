@@ -1,14 +1,13 @@
 package com.ruyi.ruyi_mart.module.user.controller;
 
 import com.ruyi.ruyi_mart.common.result.Result;
+import com.ruyi.ruyi_mart.common.util.SecurityUtils;
 import com.ruyi.ruyi_mart.module.user.dto.ChangePasswordDTO;
 import com.ruyi.ruyi_mart.module.user.dto.RegisterRequest;
 import com.ruyi.ruyi_mart.module.user.dto.UpdateProfileDTO;
 import com.ruyi.ruyi_mart.module.user.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,13 +21,9 @@ public class UserController {
     @Autowired
     private UserService userService;
 
-    /**取当前登录用户ID；未登录（匿名）时返回 null*/
+    /**取当前登录用户ID；未登录（匿名）时由 SecurityUtils 抛 401*/
     private Long currentUserId(){
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if(authentication != null && authentication.getPrincipal() instanceof Long){
-            return (Long) authentication.getPrincipal();
-        }
-        return null;
+        return SecurityUtils.currentUserId();
     }
 
     @PostMapping("/register")

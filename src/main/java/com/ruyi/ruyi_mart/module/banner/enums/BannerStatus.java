@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.annotation.EnumValue;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
-import org.checkerframework.common.value.qual.EnumVal;
 
 /**轮播图状态的枚举。*/
 @Getter

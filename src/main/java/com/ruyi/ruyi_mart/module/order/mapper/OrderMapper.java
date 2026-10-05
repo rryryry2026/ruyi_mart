@@ -28,6 +28,19 @@ public interface OrderMapper extends BaseMapper<Order> {
                        @Param("to") Integer to);
 
     /**
+     * 同 changeStatusIf，但允许一组合法的起始状态（IN 条件）。
+     * 退款审核把订单置为"已退款"时用：申请时订单可能是已支付/已发货/已完成之一，
+     * 审核是另一回事务，中间订单状态可能已被别的流程改过，
+     * 必须限定"只有仍处在这几种可退状态才改成已退款"，不能无条件覆盖。
+     */
+    @Update("<script>UPDATE order_info SET status = #{to}, update_time = NOW() " +
+            "WHERE id = #{id} AND status IN " +
+            "<foreach item='s' collection='froms' open='(' separator=',' close=')'>#{s}</foreach></script>")
+    int changeStatusIfIn(@Param("id") Long id,
+                         @Param("to") Integer to,
+                         @Param("froms") java.util.List<Integer> froms);
+
+    /**
      * 按主键加行锁取订单（退款申请时用）。
      *
      * 退款申请是"先查有没有进行中的退款单、再插入"，这个判断本身不是原子的：

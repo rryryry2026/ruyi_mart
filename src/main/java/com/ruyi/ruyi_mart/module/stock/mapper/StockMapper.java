@@ -46,8 +46,11 @@ public interface StockMapper extends BaseMapper<Stock> {
      * 单条原子 SQL 完成"读-改-写"，避免先查后改带来的并发竞态。
      * 注意赋值顺序：MySQL 的 SET 是从左到右求值，后面的表达式读到的是前面刚赋的新值，
      * 因此 available 必须排在 total 之前——否则表达式里的 total 已被覆盖，差额恒为 0。
+     * WHERE 里的 #{total} >= locked 是下限保护：新总量一旦小于在途锁定量，
+     * available 会被差额算成负数，而且 available + locked = total 恒等式依然成立，
+     * 事后的对账校验根本查不出来——必须让这条语句本身失败（影响 0 行）。
      */
     @Update("UPDATE stock SET available = available + (#{total} - total), total = #{total}, " +
-            "update_time = NOW() WHERE product_id = #{id}")
+            "update_time = NOW() WHERE product_id = #{id} AND #{total} >= locked")
     int resetTotal(@Param("id") Long id, @Param("total") Integer total);
 }

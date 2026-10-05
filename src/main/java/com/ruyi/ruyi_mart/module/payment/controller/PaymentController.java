@@ -1,14 +1,11 @@
 package com.ruyi.ruyi_mart.module.payment.controller;
 
 
-import com.ruyi.ruyi_mart.common.enums.ResultCode;
-import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.common.result.Result;
+import com.ruyi.ruyi_mart.common.util.SecurityUtils;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 /**支付回调控制器，接收支付平台异步通知，触发订单完成支付*/
@@ -20,13 +17,9 @@ public class PaymentController {
     @Autowired
     private OrderService orderService;
 
-    /**从登录态取当前用户ID*/
+    /**从登录态取当前用户ID（未认证时 SecurityUtils 会直接抛 401）*/
     private Long currentUserId(){
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof Long) {
-            return (Long) authentication.getPrincipal();
-        }
-        return null;
+        return SecurityUtils.currentUserId();
     }
 
     /**Mock支付模拟回调：点击支付页链接即视为付款成功*/
@@ -48,11 +41,7 @@ public class PaymentController {
      */
     @PostMapping("/mock/pay/{orderId}")
     public Result<Void> mockPay(@PathVariable Long orderId) {
-        Long userId = currentUserId();
-        if (userId == null) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED);
-        }
-        orderService.confirmMockPayment(userId, orderId);
+        orderService.confirmMockPayment(currentUserId(), orderId);
         return Result.success();
     }
 

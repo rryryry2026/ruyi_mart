@@ -96,7 +96,10 @@ public class CartServiceImpl implements CartService {
         String key = keyfor(userId,guestId);
         RMap<String,String> cart = cartOf(key);
         String existing = cart.get(String.valueOf(productId));
-        if(existing == null) return;
+        // 商品不在购物车里时明确报错：静默返回会让前端以为改成功了
+        if(existing == null){
+            throw new BusinessException(ResultCode.NOT_FIND, "购物车中不存在该商品");
+        }
         CartItemVO item = deserialize(existing);
         item.setQuantity(quantity);
         cart.put(String.valueOf(productId),serialize(item));
@@ -155,6 +158,10 @@ public class CartServiceImpl implements CartService {
         Product p = productService.getById(productId);
         if (p == null) {
             throw new BusinessException(ResultCode.NOT_FIND, "商品不存在: " + productId);
+        }
+        // 下架的商品不允许加购：详情页可能还留着入口，这里兜住
+        if (p.getStatus() == null || p.getStatus() != 1) {
+            throw new BusinessException(ResultCode.FAIL, "商品已下架，无法加入购物车");
         }
         CartItemVO vo = new CartItemVO();
         vo.setProductId(p.getId());

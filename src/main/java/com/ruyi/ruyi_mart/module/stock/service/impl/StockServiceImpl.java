@@ -1,8 +1,9 @@
 package com.ruyi.ruyi_mart.module.stock.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.ruyi.ruyi_mart.common.enums.ResultCode;
+import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.category.entity.Category;
 import com.ruyi.ruyi_mart.module.category.mapper.CategoryMapper;
 import com.ruyi.ruyi_mart.module.product.entity.Product;
@@ -31,6 +32,9 @@ import java.util.stream.Collectors;
 @Service
 public class StockServiceImpl implements StockService {
 
+    /**分页每页条数上限*/
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Autowired
     private StockMapper stockMapper;//库存表
     @Autowired
@@ -41,6 +45,9 @@ public class StockServiceImpl implements StockService {
     /**初始化商品库存。*/
     @Override
     public void initStock(Long productId, Integer total){
+        if(total == null || total < 0){
+            throw new BusinessException(ResultCode.FAIL, "库存总量不能为负数");
+        }
         Stock existing = stockMapper.selectById(productId);
         if(existing == null){
             Stock s = new Stock();
@@ -58,7 +65,12 @@ public class StockServiceImpl implements StockService {
             // 先查出来算好再写回就是读-改-写，并发下会丢更新。
             // （与乐观锁无关：实体上没有 @Version，项目也没注册
             //   OptimisticLockerInnerInterceptor，不存在版本号拦截。）
-            stockMapper.resetTotal(productId, total);
+            // SQL 里有 "#{total} >= locked" 的下限保护：影响 0 行说明新总量
+            // 小于在途锁定量，available 会算成负数，必须拒绝而不是写进去。
+            if(stockMapper.resetTotal(productId, total) == 0){
+                throw new BusinessException(ResultCode.FAIL,
+                        "新总量不能小于当前锁定中的库存（productId=" + productId + "）");
+            }
         }
     }
 
@@ -66,6 +78,7 @@ public class StockServiceImpl implements StockService {
     /**预扣商品库存。*/
     @Override
     public boolean tryLock(Long productId,Integer count){
+        assertPositive(count);
         int rows = stockMapper.preDeduct(productId,count);
         boolean ok = rows > 0;
         if(!ok){
@@ -77,6 +90,7 @@ public class StockServiceImpl implements StockService {
     /**确认扣减商品库存。*/
     @Override
     public void confirm(Long productId,Integer count){
+        assertPositive(count);
         if(stockMapper.confirmDeduct(productId,count) == 0){
             // SQL 里的 locked >= n 只是边界保护，不是业务幂等：
             // 同一笔订单被确认两次、或确认与退款回补撞在一起时就会拿不到行。
@@ -88,6 +102,7 @@ public class StockServiceImpl implements StockService {
     /**回补商品库存。*/
     @Override
     public void release(Long productId,Integer count){
+        assertPositive(count);
         if(stockMapper.rollback(productId,count) == 0){
             // 回补方向出错会让可用库存虚增（比少卖更危险，会导致超卖），必须可观测
             log.warn("库存回补未生效（locked 不足，疑似重复回补）productId={} count={}", productId, count);
@@ -97,6 +112,7 @@ public class StockServiceImpl implements StockService {
     /**退款。*/
     @Override
     public void refund(Long productId, Integer count){
+        assertPositive(count);
         if(stockMapper.refundBack(productId,count) == 0){
             // 原样回补都会超过 total，说明这单的库存早被补过一次了
             log.warn("退款回补未生效（超过库存总量，疑似重复回补）productId={} count={}", productId, count);
@@ -109,9 +125,22 @@ public class StockServiceImpl implements StockService {
         return stockMapper.selectById(productId);
     }
 
+    /**
+     * 数量参数必须为正：这几个语句都是"按 n 增减"的增量 SQL，
+     * 传进来 0 或负数会反向增减库存（比少卖更危险），在入口直接拦下。
+     */
+    private void assertPositive(Integer count){
+        if(count == null || count <= 0){
+            throw new BusinessException(ResultCode.FAIL, "库存操作数量必须为正整数");
+        }
+    }
+
     /**商品维度库存分页*/
     @Override
     public Page<ProductStockVO> adminStockPage(String keyword, Long categoryId, int pageNum, int pageSize){
+        // 分页参数夹在合理区间：pageSize 传超大值会把整表捞进内存
+        pageNum = Math.max(pageNum, 1);
+        pageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
         // 以商品为主表分页，再左连库存——没初始化过库存的商品也能列出来
         Page<Product> productPage = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<Product> qw = new LambdaQueryWrapper<>();

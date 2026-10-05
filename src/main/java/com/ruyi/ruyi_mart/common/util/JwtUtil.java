@@ -18,6 +18,11 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
+    /**typ 声明的取值：访问令牌*/
+    public static final String TOKEN_TYPE_ACCESS = "access";
+    /**typ 声明的取值：续期令牌*/
+    public static final String TOKEN_TYPE_REFRESH = "refresh";
+
     private final JwtProperties jwtProperties;
 
     private final SecretKey key;
@@ -31,22 +36,26 @@ public class JwtUtil {
 
     /**发短令牌。*/
     public String generateAccessToken(Long userId,String username,Integer userType){
-        return buildToken(userId,username,userType,jwtProperties.getAccessExpire());
+        return buildToken(userId,username,userType,jwtProperties.getAccessExpire(),TOKEN_TYPE_ACCESS);
     }
 
     /**发长令牌。*/
     public String generateRefreshToken(Long userId,String username,Integer userType){
-        return buildToken(userId,username,userType,jwtProperties.getRefreshExpire());
+        return buildToken(userId,username,userType,jwtProperties.getRefreshExpire(),TOKEN_TYPE_REFRESH);
     }
 
     /**造令牌。*/
-    private String buildToken(Long userId,String username,Integer userType,Long expireSeconds){
+    private String buildToken(Long userId,String username,Integer userType,Long expireSeconds,String tokenType){
         Date now = new Date();
         Date expiration = new Date(now.getTime() + expireSeconds * 1000);
         return Jwts.builder()
                 .subject(username)
                 .claim("uid",userId)
                 .claim("userType", userType)
+                // 令牌类型标记：两种令牌除有效期外完全一样，不标类型的话
+                // 7 天有效的 refreshToken 可以直接当 accessToken 用，
+                // "accessToken 只活 15 分钟"的收敛设计等于不存在
+                .claim("typ", tokenType)
                 .issuedAt(now)
                 .expiration(expiration)
                 .signWith(key)

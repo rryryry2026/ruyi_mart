@@ -14,6 +14,7 @@ import com.ruyi.ruyi_mart.module.user.service.UserService;
 import com.ruyi.ruyi_mart.module.user.vo.UserAdminVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,7 +53,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setPhone(req.getPhone());
         //注册一律是普通买家，不给注册接口留造管理员的口子
         user.setUserType(USER_TYPE_NORMAL);
-        this.save(user);
+        try {
+            this.save(user);
+        } catch (DuplicateKeyException e) {
+            // 并发注册同名/同手机号时，查重和插入之间有窗口，唯一索引是最后一道闸。
+            // 这里转成业务提示而不是 500。
+            // （本方法没有 @Transactional，catch 不会碰到"事务已被标记回滚"的问题）
+            throw new BusinessException(ResultCode.FAIL,"用户名或手机号已被使用");
+        }
     }
 
     /**修改密码*/
@@ -66,9 +74,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if(!passwordEncoder.matches(oldPassword, user.getPassword())){
             throw new BusinessException(ResultCode.FAIL, "原密码错误");
         }
-        user.setPassword(passwordEncoder.encode(newPassword));
-        user.setUpdateTime(LocalDateTime.now());
-        baseMapper.updateById(user);
+        // 只更新密码和更新时间两列：拿来做比对的 user 是快照，
+        // updateById 会把快照里的其它列（如管理员并发改过的 status）原样写回，覆盖别人的修改
+        lambdaUpdate()
+                .eq(User::getId, userId)
+                .set(User::getPassword, passwordEncoder.encode(newPassword))
+                .set(User::getUpdateTime, LocalDateTime.now())
+                .update();
 
         // 改完密码必须把 refreshToken 作废。
         // 否则账号被盗时改了密码也踢不掉对方：他手里那张 refreshToken 还能一直续期，
@@ -94,8 +106,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if(dto.getPhone() != null){
             user.setPhone(dto.getPhone());
         }
-        user.setUpdateTime(LocalDateTime.now());
-        baseMapper.updateById(user);
+        // 只 set 传了的两列 + 更新时间，不整行写回（同 changePassword 的理由）
+        lambdaUpdate()
+                .eq(User::getId, userId)
+                .set(dto.getNickname() != null, User::getNickname, dto.getNickname())
+                .set(dto.getPhone() != null, User::getPhone, dto.getPhone())
+                .set(User::getUpdateTime, LocalDateTime.now())
+                .update();
     }
 
     /**管理端：用户分页（脱敏，不含密码字段）*/
@@ -150,9 +167,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if(user.getUserType() != null && user.getUserType() == 1){
             throw new BusinessException(ResultCode.FAIL, "管理员账号不可禁用");
         }
-        user.setStatus(status);
-        user.setUpdateTime(LocalDateTime.now());
-        baseMapper.updateById(user);
+        // 只更新状态和更新时间两列，不整行写回
+        lambdaUpdate()
+                .eq(User::getId, userId)
+                .set(User::getStatus, status)
+                .set(User::getUpdateTime, LocalDateTime.now())
+                .update();
 
         // 禁用账号时顺手作废 refreshToken：否则对方手上的令牌还能续期，
         // 要等令牌自然过期才算真的禁用掉。

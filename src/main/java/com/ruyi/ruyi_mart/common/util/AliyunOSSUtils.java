@@ -69,7 +69,8 @@ public class AliyunOSSUtils {
         //检查配置问题。
         if (!StringUtils.hasText(aliyunOSSProperties.getAccessKeyId())
                 || !StringUtils.hasText(aliyunOSSProperties.getAccessKeySecret())
-                || !StringUtils.hasText(aliyunOSSProperties.getBucketName())) {
+                || !StringUtils.hasText(aliyunOSSProperties.getBucketName())
+                || !StringUtils.hasText(aliyunOSSProperties.getEndpoint())) {
             throw new BusinessException(ResultCode.FAIL,
                     "OSS 未配置：请设置环境变量 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET");
         }

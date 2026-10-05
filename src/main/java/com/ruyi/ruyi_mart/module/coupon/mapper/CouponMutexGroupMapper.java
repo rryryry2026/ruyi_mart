@@ -9,8 +9,9 @@ import org.apache.ibatis.annotations.Param;
 /**
  * 互斥组 Mapper。
  *
- * 互斥组是一份"配置数据"：券上存 mutex_group_code，核销时靠它判断"同组券不能叠加使用"。
- * 目前没有独立的管理端页面，所以建/改券时按需自动建档（见 CouponServiceImpl）。
+ * 互斥组是一份"配置数据"：建/改券时按需自动建档（见 CouponServiceImpl）。
+ * 注意核销时并不读这张表——"一笔订单只能用一张券"是比"同组不能叠加"更强的约束，
+ * 已经把叠加问题整个覆盖掉；配置保留下来是为了将来放宽成"同组多券互斥"时不用重建。
  */
 @Mapper
 public interface CouponMutexGroupMapper extends BaseMapper<CouponMutexGroup> {

@@ -30,7 +30,7 @@ public class LoginController {
 
     /**用户重续令牌*/
     @PostMapping("/refresh")
-    public Result<LoginResponse> refresh(@RequestBody RefreshRequest req){
+    public Result<LoginResponse> refresh(@Valid @RequestBody RefreshRequest req){
         LoginResponse resp = loginService.refresh(req.getRefreshToken());
         return Result.success(resp);
     }
@@ -39,7 +39,10 @@ public class LoginController {
     @PostMapping("/logout")
     public Result<Void> logout(){
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Long userId = (Long) authentication.getPrincipal();
+        // principal 不一定是 Long（匿名/系统类型）：接口本身要求已登录，但这里不能靠裸强转赌运气
+        if(authentication == null || !(authentication.getPrincipal() instanceof Long userId)){
+            return Result.success();
+        }
         loginService.logout(userId);
         return Result.success();
     }

@@ -24,15 +24,16 @@ public class CouponCreateDTO {
     @NotNull(message = "券类型不能为空")
     private CouponTypeEnum couponType;
 
-    /**满减/无门槛面额（折扣券可空）*/
-    @DecimalMin(value = "0.00", inclusive = true)
+    /**满减/无门槛面额（折扣券可空），必须大于 0（与业务校验同口径）*/
+    @DecimalMin(value = "0.00", inclusive = false)
     private BigDecimal faceValue;
 
-    /**折扣率，8.8=88折（满减/无门槛券可空）*/
-    @DecimalMin(value = "0.00", inclusive = true)
+    /**折扣率，8.8=88折（满减/无门槛券可空），必须大于 0 且小于 10（与业务校验同口径）*/
+    @DecimalMin(value = "0.00", inclusive = false)
     private BigDecimal discountRate;
 
-    /**折扣上限（折扣券可选）*/
+    /**折扣上限，0 或不填表示无上限*/
+    @DecimalMin(value = "0.00", inclusive = true)
     private BigDecimal maxDiscount;
 
     /**使用门槛（满多少可用，无门槛券为0）*/
@@ -53,8 +54,8 @@ public class CouponCreateDTO {
     /**固定有效期结束（validMode=固定时间时必填）*/
     private LocalDateTime validEnd;
 
-    /**领券后有效天数（validMode=领券后N天时必填）*/
-    @Min(0)
+    /**领券后有效天数（validMode=领券后N天时必填），必须大于 0（与业务校验同口径）*/
+    @Min(1)
     private Integer receiveValidDays;
 
     /**单人限领，默认1*/

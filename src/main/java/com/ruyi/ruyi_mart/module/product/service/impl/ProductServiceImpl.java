@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ruyi.ruyi_mart.common.enums.ResultCode;
+import com.ruyi.ruyi_mart.common.exception.BusinessException;
 import com.ruyi.ruyi_mart.module.product.dto.ProductQueryDTO;
 import com.ruyi.ruyi_mart.module.product.entity.Product;
 import com.ruyi.ruyi_mart.module.product.mapper.ProductMapper;
@@ -24,6 +26,9 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> implements ProductService {
 
+    /**分页每页条数上限*/
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Autowired
     private RedissonClient redissonClient;
     @Autowired
@@ -31,6 +36,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
 
     private static final String KEY_PREFIX = "ruyi:product:detail:";
     private static final long CACHE_TTL_SECONDS = 30 * 60;
+    /** 不存在的商品的空值缓存时长：短 TTL 挡穿透，又不至于让"新建的同 id 商品"等太久 */
+    private static final long CACHE_NULL_TTL_SECONDS = 60;
 
     /**查商品详情。*/
     @Override
@@ -39,11 +46,14 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         RBucket<String> bucket = redissonClient.getBucket(key, StringCodec.INSTANCE);
         String cached = bucket.get();
         if(cached != null){
-            return deserialize(cached);
+            // 空串是不存在商品的哨兵值：不缓存空值的话，恶意/异常请求会反复打到数据库
+            return cached.isEmpty() ? null : deserialize(cached);
         }
         Product product = super.getById(id);
         if(product != null){
             bucket.set(serialize(product),CACHE_TTL_SECONDS, TimeUnit.SECONDS);
+        }else{
+            bucket.set("",CACHE_NULL_TTL_SECONDS, TimeUnit.SECONDS);
         }
         return product;
     }
@@ -71,7 +81,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     @Override
     public Page<Product> pageQuery(ProductQueryDTO q){
         int pageNum = (q.getPageNum() == null || q.getPageNum() < 1) ? 1 :q.getPageNum();
-        int pageSize = (q.getPageSize() == null || q.getPageSize() < 1) ? 10 :q.getPageSize();
+        // pageSize 夹进上限：传 10000 也全盘接受会把整表捞进内存
+        int pageSize = Math.min((q.getPageSize() == null || q.getPageSize() < 1) ? 10 :q.getPageSize(), MAX_PAGE_SIZE);
         Page<Product> page = new Page<>(pageNum, pageSize);
 
         LambdaQueryWrapper<Product> w = new LambdaQueryWrapper<>();
@@ -92,6 +103,11 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     /**修改商品状态 启用/禁用*/
     @Override
     public void updateStatus(Long id, Integer targetStatus){
+        // 状态字典只有 0(下架)/1(上架)：放 99 这类值进去商品会"静默消失"——
+        // 消费端列表只认 1，它又不在管理端列表的筛选里，谁也改不回来
+        if(targetStatus == null || (targetStatus != 0 && targetStatus != 1)){
+            throw new BusinessException(ResultCode.FAIL, "status 必须为 0(下架) 或 1(上架)");
+        }
         Product p = new Product();
         p.setId(id);
         p.setStatus(targetStatus);

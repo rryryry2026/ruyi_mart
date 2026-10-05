@@ -16,12 +16,14 @@ public class Result<T> implements Serializable {
 
     private Result(){}
 
+    //构造器私有
     private Result(int code,String message,T data){
         this.code = code;
         this.message = message;
         this.data = data;
     }
 
+    //静态工厂方法
     public static <T> Result<T> success(){
         return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMessage(), null);
     }

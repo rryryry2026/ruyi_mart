@@ -1,8 +1,8 @@
 package com.ruyi.ruyi_mart.module.order.task;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruyi.ruyi_mart.module.order.entity.Order;
+import com.ruyi.ruyi_mart.module.order.enums.OrderStatus;
 import com.ruyi.ruyi_mart.module.order.mapper.OrderMapper;
 import com.ruyi.ruyi_mart.module.order.service.OrderService;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +32,9 @@ public class OrderTimeoutCloseTask {
     /** 订单待支付超时时长（分钟） */
     private static final int TIMEOUT_MINUTES = 30;
 
+    /** 单轮最多处理的订单数：积压时一次性全捞进内存会拖垮应用，剩下的留给下一轮（60 秒后） */
+    private static final int BATCH_LIMIT = 500;
+
     @Autowired
     private OrderMapper orderMapper;
     @Autowired
@@ -41,8 +44,10 @@ public class OrderTimeoutCloseTask {
     public void closeExpiredOrders(){
         LocalDateTime deadline = LocalDateTime.now().minusMinutes(TIMEOUT_MINUTES);
         LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
-        qw.eq(Order::getStatus,0).lt(Order::getCreateTime,deadline);
-        List<Order> expired = orderMapper.selectList((qw));
+        // 状态用枚举常量而不是魔法数字 0：OrderStatus.PENDING 改码时这里才不会悄悄失配
+        qw.eq(Order::getStatus, OrderStatus.PENDING.getCode()).lt(Order::getCreateTime,deadline);
+        qw.last("LIMIT " + BATCH_LIMIT);
+        List<Order> expired = orderMapper.selectList(qw);
         if(expired.isEmpty()){
             return;
         }

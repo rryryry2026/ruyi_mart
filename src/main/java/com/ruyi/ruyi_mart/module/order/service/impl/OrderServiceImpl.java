@@ -1,6 +1,5 @@
 package com.ruyi.ruyi_mart.module.order.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -51,6 +50,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements OrderService {
 
+    /**分页每页条数上限*/
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Autowired
     private CartService cartService;
     @Autowired
@@ -85,7 +87,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
          */
         for(CartItemVO ci : cartItems){
             Product current = productMapper.selectById(ci.getProductId());
-            if(current == null){
+            // 下架的商品不允许下单：购物车里的快照还看得到它，但不查状态的话
+            // 已下架商品仍能按旧快照价买走
+            if(current == null || current.getStatus() == null || current.getStatus() != 1){
                 throw new BusinessException(ResultCode.NOT_FIND, "商品已下架：" + ci.getName());
             }
             if(current.getPrice() == null || current.getPrice().compareTo(ci.getPrice()) != 0){
@@ -120,9 +124,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
          * 必须在下单之前算好：下面的用券要按"订单金额"判断满减门槛、算抵扣金额，
          * 而 useCoupon 是从订单表读金额的 —— 如果插入时还写占位的 0，
          * 带券下单会直接报"订单金额异常，无法使用优惠券"。
+         * 金额也用 sortedItems 算：和上面锁库存保持同一个集合，避免"锁库存用排序后的、
+         * 算金额用原始的"两套口径（现在结果相同，将来加顺序相关逻辑就会走样）。
          */
         BigDecimal totalAmount = BigDecimal.ZERO;
-        for(CartItemVO ci : cartItems){
+        for(CartItemVO ci : sortedItems){
             totalAmount = totalAmount.add(ci.getPrice().multiply(BigDecimal.valueOf(ci.getQuantity())));
         }
 
@@ -193,7 +199,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Override
     public List<OrderVO> listOrders(Long userId){
         LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
-        qw.eq(Order::getUserId,userId).orderByDesc(Order::getCreateTime);
+        // 只按 createTime 排序时同秒记录顺序不稳，加 id 作第二排序键
+        qw.eq(Order::getUserId,userId).orderByDesc(Order::getCreateTime).orderByDesc(Order::getId);
         List<Order> orders = baseMapper.selectList(qw);
         //批量转 VO：明细一次查完，避免逐单查明细的 N+1
         return toVOList(orders);
@@ -212,8 +219,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public PaymentResult payOrder(Long userId, Long orderId, String payType) {
+        // 无事务：只读订单 + 选支付策略，没有写库动作，开事务是纯开销
         Order order = baseMapper.selectById(orderId);
         if (order == null) {
             throw new BusinessException(ResultCode.NOT_FIND, "订单不存在");
@@ -383,7 +390,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Override
     public List<OrderVO> listOrdersByStatus(Long userId, Integer status){
         LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
-        qw.eq(Order::getUserId,userId).eq(Order::getStatus,status).orderByDesc(Order::getCreateTime);
+        qw.eq(Order::getUserId,userId).eq(Order::getStatus,status)
+                .orderByDesc(Order::getCreateTime).orderByDesc(Order::getId);
         List<Order> orders = baseMapper.selectList(qw);
         return toVOList(orders);
     }
@@ -397,7 +405,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         if(status != null){
             qw.eq(Order::getStatus,status);
         }
-        qw.orderByDesc(Order::getCreateTime);
+        qw.orderByDesc(Order::getCreateTime).orderByDesc(Order::getId);
         baseMapper.selectPage(page,qw);
 
         Page<OrderVO> voPage = new Page<>(page.getCurrent(),page.getSize(),page.getTotal());
@@ -409,7 +417,10 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     public Page<OrderAdminVO> adminListOrders(OrderAdminQueryDTO dto){
-        Page<Order> page = new Page<>(dto.getPageNum(), dto.getPageSize());
+        // pageSize 夹进上限：传 10000 也全盘接受会把整表捞进内存
+        int pageSize = Math.min(dto.getPageSize() == null ? 10 : dto.getPageSize(), MAX_PAGE_SIZE);
+        int pageNum = Math.max(dto.getPageNum() == null ? 1 : dto.getPageNum(), 1);
+        Page<Order> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<Order> qw = new LambdaQueryWrapper<>();
         if(StringUtils.hasText(dto.getOrderNo())){
             qw.eq(Order::getOrderNo, dto.getOrderNo());
@@ -430,7 +441,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             qw.apply("user_id IN (SELECT id FROM user WHERE username LIKE CONCAT('%', {0}, '%') "
                     + "OR nickname LIKE CONCAT('%', {0}, '%'))", dto.getKeyword());
         }
-        qw.orderByDesc(Order::getCreateTime);
+        qw.orderByDesc(Order::getCreateTime).orderByDesc(Order::getId);
         baseMapper.selectPage(page, qw);
 
         Page<OrderAdminVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());

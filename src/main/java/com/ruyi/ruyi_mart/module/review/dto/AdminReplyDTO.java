@@ -7,8 +7,8 @@ import lombok.Data;
 
 /**
  * 管理端商家回复入参。
- * 刻意不复用用户端的 SecondProductCommentDTO：那个 DTO 的 userNickname 由前端传入，
- * 存在伪造身份的风险；管理端回复的昵称一律从数据库取当前管理员本人。
+ * 刻意不复用用户端的 SecondProductCommentDTO：用户端 DTO 不带任何身份字段，
+ * 昵称等身份信息一律由服务端从库和登录态推导；管理端回复的昵称取当前管理员本人。
  */
 @Data
 public class AdminReplyDTO {

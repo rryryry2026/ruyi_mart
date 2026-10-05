@@ -1,6 +1,7 @@
 package com.ruyi.ruyi_mart.security.filter;
 
 import com.ruyi.ruyi_mart.common.util.JwtUtil;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,19 +42,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if(StringUtils.hasText(token) && jwtUtil.validateToken(token)){
             try{
-                Long userId = jwtUtil.getUserId(token);
-                String username = jwtUtil.getUsername(token);
-                Integer userType = jwtUtil.getUserType(token);
+                // 只解析这一次：原来 getUserId/getUsername/getUserType 各 parse 一遍，
+                // 一个请求重复验签 4 次，纯浪费
+                Claims claims = jwtUtil.parseToken(token);
+                // refreshToken 只用于换新令牌（/user/refresh），不能当 accessToken 认证用
+                if(!JwtUtil.TOKEN_TYPE_REFRESH.equals(claims.get("typ", String.class))){
+                    Long userId = claims.get("uid", Long.class);
+                    Integer userType = claims.get("userType", Integer.class);
 
-                List<SimpleGrantedAuthority> authorities = new ArrayList<>();
-                if(userType != null && userType == 1){
-                    authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+                    List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                    if(userType != null && userType == 1){
+                        authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+                    }
+
+                    UsernamePasswordAuthenticationToken auth =
+                            new UsernamePasswordAuthenticationToken(userId,null,authorities);
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                    log.debug("JWT鉴权成功:userId={}, username={}",userId,claims.getSubject());
                 }
-
-                UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(userId,null,authorities);
-                SecurityContextHolder.getContext().setAuthentication(auth);
-                log.debug("JWT鉴权成功:userId={}, username={}",userId,username);
 
             }catch (Exception e){
                 log.debug("JWT鉴权失败:{}",e.getMessage());

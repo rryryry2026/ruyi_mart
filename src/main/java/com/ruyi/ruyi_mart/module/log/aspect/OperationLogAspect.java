@@ -1,6 +1,8 @@
 package com.ruyi.ruyi_mart.module.log.aspect;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ruyi.ruyi_mart.module.log.annotation.OpLog;
 import com.ruyi.ruyi_mart.module.log.entity.OperationLog;
 import com.ruyi.ruyi_mart.module.log.mapper.OperationLogMapper;
@@ -26,8 +28,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -229,9 +233,36 @@ public class OperationLogAspect {
             }
         }
         try {
-            return truncate(objectMapper.writeValueAsString(map), PARAMS_MAX_LENGTH);
+            // 先转成 JSON 树再递归脱敏：参数名匹配只能挡住"参数本身叫 password"的情况，
+            // @RequestBody DTO 的参数名是 dto，里面嵌套的 password 字段必须靠字段名递归才能拦住
+            JsonNode root = objectMapper.valueToTree(map);
+            maskSensitiveFields(root);
+            return truncate(objectMapper.writeValueAsString(root), PARAMS_MAX_LENGTH);
         } catch (Exception e) {
             return truncate(Arrays.toString(args), PARAMS_MAX_LENGTH);
+        }
+    }
+
+    /**递归遍历 JSON 树，把字段名命中敏感词的值替换成 ******（对象与数组都下钻）*/
+    private void maskSensitiveFields(JsonNode node) {
+        if (node == null) {
+            return;
+        }
+        if (node.isObject()) {
+            ObjectNode obj = (ObjectNode) node;
+            List<String> names = new ArrayList<>();
+            obj.fieldNames().forEachRemaining(names::add);
+            for (String fieldName : names) {
+                if (isSensitive(fieldName)) {
+                    obj.put(fieldName, "******");
+                } else {
+                    maskSensitiveFields(obj.get(fieldName));
+                }
+            }
+        } else if (node.isArray()) {
+            for (JsonNode child : node) {
+                maskSensitiveFields(child);
+            }
         }
     }
 
@@ -245,8 +276,19 @@ public class OperationLogAspect {
         return false;
     }
 
-    /** 反向代理场景优先取 X-Forwarded-For 的第一段（真实客户端IP） */
+    /** 是否信任反向代理头。X-Forwarded-For 是客户端随请求就能带上、可任意伪造的头：
+     *  直连部署（没有自己的反向代理在前面改写它）时必须默认不信任，审计 IP 才取的是真实连接地址。 */
+    @org.springframework.beans.factory.annotation.Value("${ruyi-mart.log.trust-proxy-headers:false}")
+    private boolean trustProxyHeaders;
+
+    /** 取客户端 IP。仅在 trust-proxy-headers 打开时才采信代理头 */
     private String resolveIp(HttpServletRequest request) {
+        String remote = request.getRemoteAddr();
+        // 本机访问时 Servlet 容器返回的是 IPv6 回环地址，转成更易读的 127.0.0.1
+        String normalized = "0:0:0:0:0:0:0:1".equals(remote) || "::1".equals(remote) ? "127.0.0.1" : remote;
+        if (!trustProxyHeaders) {
+            return normalized;
+        }
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
             return forwarded.split(",")[0].trim();
@@ -255,9 +297,7 @@ public class OperationLogAspect {
         if (realIp != null && !realIp.isBlank()) {
             return realIp;
         }
-        String remote = request.getRemoteAddr();
-        // 本机访问时 Servlet 容器返回的是 IPv6 回环地址，转成更易读的 127.0.0.1
-        return "0:0:0:0:0:0:0:1".equals(remote) || "::1".equals(remote) ? "127.0.0.1" : remote;
+        return normalized;
     }
 
     private String truncate(String value, int max) {
